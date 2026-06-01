@@ -58,6 +58,7 @@ function IndexChip({ ticker, label }) {
 function WatchRow({ ticker, onRemove }) {
   const [quote, setQuote] = useState(null)
   const [logoError, setLogoError] = useState(false)
+  const [hovered, setHovered] = useState(false)
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -68,31 +69,37 @@ function WatchRow({ ticker, onRemove }) {
 
   return (
     <div
-      className="flex items-center gap-4 py-3 border-b cursor-pointer transition-opacity hover:opacity-70"
+      className="flex items-center gap-4 py-3 border-b"
       style={{ borderBottomColor: 'var(--divider)' }}
-      onClick={() => navigate(`/stock/${ticker}`)}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
     >
       {/* Avatar (Logo from Clearbit) */}
-      {!logoError ? (
-        <div className="w-10 h-10 rounded-lg flex-shrink-0 bg-white flex items-center justify-center p-1.5 shadow-sm border border-color">
-          <img 
-            src={`https://logo.clearbit.com/${ticker.toLowerCase()}.com`} 
-            alt={ticker}
-            className="max-w-full max-h-full object-contain"
-            onError={() => setLogoError(true)}
-          />
-        </div>
-      ) : (
-        <div 
-          className="w-10 h-10 rounded-lg flex-shrink-0 flex items-center justify-center border border-color"
-          style={{ background: 'var(--primary-bg)' }}
-        >
-          <Building2 size={18} className="text-primary opacity-60" />
-        </div>
-      )}
+      <div
+        className="cursor-pointer"
+        onClick={() => navigate(`/stock/${ticker}`)}
+      >
+        {!logoError ? (
+          <div className="w-10 h-10 rounded-lg flex-shrink-0 bg-white flex items-center justify-center p-1.5 shadow-sm border border-color">
+            <img
+              src={`https://logo.clearbit.com/${ticker.toLowerCase()}.com`}
+              alt={ticker}
+              className="max-w-full max-h-full object-contain"
+              onError={() => setLogoError(true)}
+            />
+          </div>
+        ) : (
+          <div
+            className="w-10 h-10 rounded-lg flex-shrink-0 flex items-center justify-center border border-color"
+            style={{ background: 'var(--primary-bg)' }}
+          >
+            <Building2 size={18} className="text-primary opacity-60" />
+          </div>
+        )}
+      </div>
 
       {/* Info */}
-      <div className="flex-1 min-w-0">
+      <div className="flex-1 min-w-0 cursor-pointer" onClick={() => navigate(`/stock/${ticker}`)}>
         <div className="font-bold text-[15px] text-ink">{ticker}</div>
         {!quote ? (
           <div className="h-3 w-20 rounded animate-pulse mt-1" style={{ background: 'var(--divider)' }} />
@@ -103,12 +110,12 @@ function WatchRow({ ticker, onRemove }) {
 
       {/* Price + change */}
       {!quote ? (
-        <div className="text-right">
+        <div className="text-right cursor-pointer" onClick={() => navigate(`/stock/${ticker}`)}>
           <div className="h-4 w-16 rounded animate-pulse mb-1" style={{ background: 'var(--divider)' }} />
           <div className="h-3 w-11 rounded animate-pulse ml-auto" style={{ background: 'var(--border-color)' }} />
         </div>
       ) : (
-        <div className="text-right">
+        <div className="text-right cursor-pointer" onClick={() => navigate(`/stock/${ticker}`)}>
           <div className="text-[16px] font-bold text-ink font-num tracking-tight">
             {fmt.price(quote.price)}
           </div>
@@ -118,6 +125,24 @@ function WatchRow({ ticker, onRemove }) {
           </div>
         </div>
       )}
+
+      {/* Remove button — appears on hover */}
+      <button
+        onClick={e => { e.stopPropagation(); onRemove(ticker) }}
+        style={{
+          opacity: hovered ? 1 : 0,
+          transition: 'opacity 0.15s',
+          background: 'none', border: 'none', cursor: 'pointer',
+          padding: '4px 6px', borderRadius: 6,
+          color: 'var(--text-tertiary)',
+          flexShrink: 0,
+        }}
+        onMouseEnter={e => { e.currentTarget.style.background = 'var(--down-bg)'; e.currentTarget.style.color = 'var(--down)' }}
+        onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = 'var(--text-tertiary)' }}
+        title="ลบออกจาก Watchlist"
+      >
+        ✕
+      </button>
     </div>
   )
 }
@@ -282,12 +307,17 @@ export default function Dashboard() {
   const [addError, setAddError] = useState('')
 
   useEffect(() => {
+    const removedDefaults = JSON.parse(localStorage.getItem('sv-removed-defaults') || '[]')
     portfolioApi.getWatchlist()
       .then(d => {
-        const list = d.watchlist?.map(w => w.ticker) || []
-        setWatchlist(list.length ? list : DEFAULT_WATCHLIST)
+        const dbList = d.watchlist?.map(w => w.ticker) || []
+        const merged = [...new Set([...DEFAULT_WATCHLIST, ...dbList])].filter(t => !removedDefaults.includes(t))
+        setWatchlist(merged)
       })
-      .catch(() => setWatchlist(DEFAULT_WATCHLIST))
+      .catch(() => {
+        const merged = DEFAULT_WATCHLIST.filter(t => !removedDefaults.includes(t))
+        setWatchlist(merged)
+      })
       .finally(() => setLoaded(true))
   }, [])
 
@@ -323,6 +353,10 @@ export default function Dashboard() {
 
   const removeFromWatchlist = async (ticker) => {
     try { await portfolioApi.removeWatchlist(ticker) } catch {}
+    if (DEFAULT_WATCHLIST.includes(ticker)) {
+      const removed = JSON.parse(localStorage.getItem('sv-removed-defaults') || '[]')
+      localStorage.setItem('sv-removed-defaults', JSON.stringify([...new Set([...removed, ticker])]))
+    }
     setWatchlist(watchlist.filter(t => t !== ticker))
   }
 
