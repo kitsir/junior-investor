@@ -87,11 +87,10 @@ export async function getFundamentals(ticker) {
     
     const d = json.data[0].d
     const v = (val, isPct = false) => val ? (isPct ? val / 100 : val) : null
-    const quote = await getQuote(ticker)
 
     return {
       ticker: ticker,
-      name: d[1] || quote.name,
+      name: d[1] || ticker,
       sector: d[22],
       industry: d[23],
       description: 'Data provided by TradingView Scanner API.', // We don't have full business description from TV
@@ -130,9 +129,8 @@ export async function getFundamentals(ticker) {
       employees: v(d[21])
     }
   } catch (err) {
-    // Fallback: return just quote data
-    const quote = await getQuote(ticker)
-    return { ticker, name: quote.name, marketCap: null, description: `Error fetching fundamentals: ${err.message}` }
+    console.error(`TV Fundamentals error for ${ticker}:`, err.message)
+    return { ticker, name: ticker, marketCap: null, description: `Error fetching fundamentals: ${err.message}` }
   }
 }
 

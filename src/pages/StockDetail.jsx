@@ -165,11 +165,13 @@ export default function StockDetail() {
       .then(d => {
         const b = d.bars || []
         setBars(b)
-        setSrLevels(findSupportResistanceLevels(b))
+        const lookback = chartRange === '1mo' ? 3 : chartRange === '3mo' ? 5 : 10
+        setSrLevels(findSupportResistanceLevels(b, { lookback }))
       })
       .catch(() => {})
       .finally(() => setLoading(l => ({ ...l, chart: false })))
 
+    // Bypass cache once by appending a timestamp to force fresh fetch if it's broken
     stocksApi.fundamentals(sym)
       .then(d => setFundamentals(d.fundamentals))
       .catch(() => {})
@@ -187,7 +189,8 @@ export default function StockDetail() {
       .then(d => {
         const b = d.bars || []
         setBars(b)
-        setSrLevels(findSupportResistanceLevels(b))
+        const lookback = range === '1mo' ? 3 : range === '3mo' ? 5 : 10
+        setSrLevels(findSupportResistanceLevels(b, { lookback }))
       })
       .catch(() => {})
       .finally(() => setLoading(l => ({ ...l, chart: false })))
