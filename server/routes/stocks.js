@@ -3,19 +3,17 @@ import pool from '../db.js'
 import { getQuote, getChart, getFundamentals, search } from '../yahoo.js'
 
 const router = Router()
-const CACHE_TTL_MIN = 15
-
-function isCacheValid(updatedAt) {
-  return (Date.now() - new Date(updatedAt).getTime()) / 60000 < CACHE_TTL_MIN
+const TTL = {
+  quote: 2,
+  chart: 15,
+  fundamentals: 1440 // 24 hours
 }
 
-async function getCache(key, type) {
+async function getCacheRow(key, type) {
   const { rows } = await pool.query(
     'SELECT data, updated_at FROM cache WHERE ticker = $1 AND type = $2', [key, type]
   )
-  const row = rows[0]
-  if (row && isCacheValid(row.updated_at)) return JSON.parse(row.data)
-  return null
+  return rows[0]
 }
 
 async function setCache(key, type, data) {
@@ -38,10 +36,17 @@ router.get('/search', async (req, res) => {
 
 router.get('/:ticker/quote', async (req, res) => {
   const ticker = req.params.ticker.toUpperCase()
+  const cached = await getCacheRow(ticker, 'quote')
+  const isFresh = cached && (Date.now() - new Date(cached.updated_at).getTime()) / 60000 < TTL.quote
+  
+  if (isFresh) return res.json({ success: true, quote: JSON.parse(cached.data), cached: true })
+  
   try {
     const quote = await getQuote(ticker)
+    await setCache(ticker, 'quote', quote)
     res.json({ success: true, quote })
   } catch (err) {
+    if (cached) return res.json({ success: true, quote: JSON.parse(cached.data), cached: true, stale: true })
     console.error(`Quote error for ${ticker}:`, err.message)
     res.status(502).json({ success: false, error: err.message })
   }
@@ -51,13 +56,18 @@ router.get('/:ticker/chart', async (req, res) => {
   const ticker = req.params.ticker.toUpperCase()
   const { range = '1y', interval = '1d' } = req.query
   const cacheKey = `${ticker}_${range}_${interval}`
-  const cached = await getCache(cacheKey, 'chart')
-  if (cached) return res.json({ success: true, bars: cached, cached: true })
+  
+  const cached = await getCacheRow(cacheKey, 'chart')
+  const isFresh = cached && (Date.now() - new Date(cached.updated_at).getTime()) / 60000 < TTL.chart
+  
+  if (isFresh) return res.json({ success: true, bars: JSON.parse(cached.data), cached: true })
+  
   try {
     const bars = await getChart(ticker, range, interval)
     await setCache(cacheKey, 'chart', bars)
     res.json({ success: true, bars })
   } catch (err) {
+    if (cached) return res.json({ success: true, bars: JSON.parse(cached.data), cached: true, stale: true })
     console.error(`Chart error for ${ticker}:`, err.message)
     res.status(502).json({ success: false, error: err.message })
   }
@@ -65,13 +75,17 @@ router.get('/:ticker/chart', async (req, res) => {
 
 router.get('/:ticker/fundamentals', async (req, res) => {
   const ticker = req.params.ticker.toUpperCase()
-  const cached = await getCache(ticker, 'fundamentals')
-  if (cached) return res.json({ success: true, fundamentals: cached, cached: true })
+  const cached = await getCacheRow(ticker, 'fundamentals')
+  const isFresh = cached && (Date.now() - new Date(cached.updated_at).getTime()) / 60000 < TTL.fundamentals
+  
+  if (isFresh) return res.json({ success: true, fundamentals: JSON.parse(cached.data), cached: true })
+  
   try {
     const fundamentals = await getFundamentals(ticker)
     await setCache(ticker, 'fundamentals', fundamentals)
     res.json({ success: true, fundamentals })
   } catch (err) {
+    if (cached) return res.json({ success: true, fundamentals: JSON.parse(cached.data), cached: true, stale: true })
     res.status(502).json({ success: false, error: err.message })
   }
 })
