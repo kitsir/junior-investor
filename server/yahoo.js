@@ -1,3 +1,6 @@
+import YahooFinanceClass from 'yahoo-finance2'
+const yahooFinance = new YahooFinanceClass()
+
 // Direct Yahoo Finance fetch — no cookie/crumb needed for v8 chart endpoints
 const HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -5,28 +8,8 @@ const HEADERS = {
   'Accept-Language': 'en-US,en;q=0.9',
 }
 
-async function getCookieAndCrumb() {
-  if (global._crumb && Date.now() < global._cookieExpiry) return { cookie: global._cookie, crumb: global._crumb }
-
-  const r1 = await fetch('https://finance.yahoo.com', { headers: HEADERS })
-  const cookies = r1.headers.getSetCookie?.() || []
-  global._cookie = cookies.map(c => c.split(';')[0]).join('; ')
-
-  const r2 = await fetch('https://query2.finance.yahoo.com/v1/test/getcrumb', {
-    headers: { ...HEADERS, Cookie: global._cookie }
-  })
-  global._crumb = await r2.text()
-  global._cookieExpiry = Date.now() + 30 * 60 * 1000
-
-  return { cookie: global._cookie, crumb: global._crumb }
-}
-
 async function yf(url) {
-  const { cookie, crumb } = await getCookieAndCrumb()
-  const sep = url.includes('?') ? '&' : '?'
-  const res = await fetch(`${url}${sep}crumb=${encodeURIComponent(crumb)}`, {
-    headers: { ...HEADERS, Cookie: cookie }
-  })
+  const res = await fetch(url, { headers: HEADERS })
   if (!res.ok) throw new Error(`Yahoo ${res.status} ${url.split('?')[0]}`)
   return res.json()
 }
@@ -71,15 +54,13 @@ export async function getChart(ticker, range = '1y', interval = '1d') {
 }
 
 export async function getFundamentals(ticker) {
-  // Try quoteSummary v11 (newer, often works without crumb)
   try {
-    const modules = 'summaryDetail,defaultKeyStatistics,financialData,assetProfile'
-    const data = await yf(`https://query2.finance.yahoo.com/v11/finance/quoteSummary/${ticker}?modules=${modules}&corsDomain=finance.yahoo.com`)
-    const r = data.quoteSummary.result[0]
-    const fd = r.financialData || {}
-    const ks = r.defaultKeyStatistics || {}
-    const sd = r.summaryDetail || {}
-    const ap = r.assetProfile || {}
+    const modules = ['summaryDetail', 'defaultKeyStatistics', 'financialData', 'assetProfile']
+    const data = await yahooFinance.quoteSummary(ticker, { modules })
+    const fd = data.financialData || {}
+    const ks = data.defaultKeyStatistics || {}
+    const sd = data.summaryDetail || {}
+    const ap = data.assetProfile || {}
     const quote = await getQuote(ticker)
     return buildFundamentals(ticker, quote.name, ap, fd, ks, sd)
   } catch {
