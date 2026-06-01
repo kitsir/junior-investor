@@ -33,6 +33,9 @@ app.use('/api/ceo', ceoRouter)
 
 app.get('/api/health', (req, res) => res.json({ ok: true, ts: new Date().toISOString() }))
 
-initDb()
-  .then(() => app.listen(PORT, () => console.log(`StockVision API ready → port ${PORT}`)))
-  .catch(err => { console.error('DB init failed:', err); process.exit(1) })
+app.listen(PORT, () => {
+  console.log(`StockVision API listening → port ${PORT}`)
+  initDb()
+    .then(() => console.log('DB ready'))
+    .catch(err => console.error('DB init error:', err))
+})
