@@ -21,6 +21,7 @@ export default function PriceChart({ bars, levels = [], range, onRangeChange, lo
     if (!containerRef.current) return
 
     const chart = createChart(containerRef.current, {
+      width: containerRef.current.clientWidth || 800,
       layout: {
         background: { color: '#FFFFFF' },
         textColor: '#AEAEB2',

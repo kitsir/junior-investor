@@ -75,10 +75,14 @@ export function findSupportResistanceLevels(bars, opts = {}) {
 
 /**
  * แยก S/R levels เป็น resistance (เหนือราคา) และ support (ใต้ราคา)
+ * กรองเฉพาะ levels ที่อยู่ภายใน ±20% ของราคาปัจจุบัน
  */
-export function splitLevels(levels, currentPrice) {
-  const resistance = levels.filter(l => l.price > currentPrice * 1.001)
-  const support = levels.filter(l => l.price < currentPrice * 0.999)
+export function splitLevels(levels, currentPrice, proximityPct = 0.20) {
+  const lo = currentPrice * (1 - proximityPct)
+  const hi = currentPrice * (1 + proximityPct)
+  const nearby = levels.filter(l => l.price >= lo && l.price <= hi)
+  const resistance = nearby.filter(l => l.price > currentPrice * 1.001)
+  const support = nearby.filter(l => l.price < currentPrice * 0.999)
   return { resistance, support }
 }
 

@@ -87,7 +87,7 @@ export async function getFundamentals(ticker) {
     if (!json.data || json.data.length === 0) throw new Error('Not found in TV')
     
     const d = json.data[0].d
-    const v = (val, isPct = false) => val ? (isPct ? val / 100 : val) : null
+    const v = (val, isPct = false) => (val != null && val !== '') ? (isPct ? val / 100 : val) : null
     
     let forwardEps = v(d[25]);
     let forwardPE = null;

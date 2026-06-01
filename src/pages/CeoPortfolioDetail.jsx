@@ -91,9 +91,8 @@ export default function CeoPortfolioDetail() {
 
   // CEO Portfolio returns aggregated positions already in the backend mock.
   // We calculate Initial Capital as Total Value - Total Gain.
-  const initialCapital = data.totalValue - data.totalGain
+  const initialCapital = data.totalCost
   const up = data.totalGain >= 0
-  const daysActive = 365 // Mock days active for CEO portfolio since it's hardcoded
 
   return (
     <div style={{ maxWidth: 900, margin: '0 auto', padding: '24px 0 48px' }}>
@@ -120,10 +119,10 @@ export default function CeoPortfolioDetail() {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 24 }}>
         {[
-          { label: 'เงินต้น (Initial Capital)', value: fmt.price(initialCapital), color: 'var(--text-ink)' },
-          { label: 'มูลค่าปัจจุบัน (Current Value)', value: fmt.price(data.totalValue), color: 'var(--text-ink)' },
+          { label: 'เงินต้นรวม', value: fmt.price(initialCapital), color: 'var(--text-ink)' },
+          { label: 'มูลค่าปัจจุบัน', value: fmt.price(data.totalValue), color: 'var(--text-ink)' },
           { label: 'กำไร/ขาดทุนรวม', value: `${up ? '+' : ''}${fmt.price(data.totalGain)}`, color: up ? 'var(--up)' : 'var(--down)' },
-          { label: 'ระยะเวลาการลงทุน', value: `${daysActive} วัน`, color: 'var(--primary)' },
+          { label: 'ผลตอบแทนรวม', value: `${up ? '+' : ''}${data.totalGainPct?.toFixed(2)}%`, color: up ? 'var(--up)' : 'var(--down)' },
         ].map(({ label, value, color }) => (
           <div key={label} className="card" style={{ padding: '16px 18px', position: 'relative', overflow: 'hidden' }}>
             <div style={{ position: 'absolute', top: 0, right: 0, width: 80, height: 80, background: 'var(--primary)', opacity: 0.03, borderRadius: '50%', transform: 'translate(30%, -30%)' }} />

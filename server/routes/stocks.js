@@ -76,10 +76,13 @@ router.get('/:ticker/chart', async (req, res) => {
 router.get('/:ticker/fundamentals', async (req, res) => {
   const ticker = req.params.ticker.toUpperCase()
   const cached = await getCacheRow(ticker, 'fundamentals')
-  // TEMPORARY FIX: Force isFresh to false to overwrite poisoned null cache from Yahoo failure
-  const isFresh = false 
-  
-  if (isFresh) return res.json({ success: true, fundamentals: JSON.parse(cached.data), cached: true })
+  // Valid cache = not expired AND has real data (marketCap present = not a poison/error entry)
+  const parsedCache = cached ? JSON.parse(cached.data) : null
+  const isFresh = cached
+    && (Date.now() - new Date(cached.updated_at).getTime()) / 60000 < TTL.fundamentals
+    && parsedCache?.marketCap != null
+
+  if (isFresh) return res.json({ success: true, fundamentals: parsedCache, cached: true })
   
   try {
     const fundamentals = await getFundamentals(ticker)
