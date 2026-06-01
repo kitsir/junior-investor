@@ -125,14 +125,34 @@ function toTVTicker(ticker) {
 export async function getFundamentals(ticker) {
   try {
     const columns = [
-      'name', 'description', 'market_cap_basic', 'price_earnings_ttm',
-      'price_book_ratio', 'price_sales_current', 'enterprise_value_ebitda_ttm',
-      'gross_margin', 'net_margin_ttm', 'return_on_equity', 'return_on_assets',
-      'total_revenue', 'revenue_growth_yoy', 'earnings_per_share_basic_ttm',
-      'total_debt', 'cash_n_short_term_invest', 'current_ratio', 'debt_to_equity',
-      'dividend_yield_recent', 'beta_1_year', 'total_shares_outstanding',
-      'number_of_employees', 'sector', 'industry', 'operating_margin',
-      'earnings_per_share_forecast_next_fy'
+      'name',                              // d[0]  ticker symbol
+      'description',                       // d[1]  company full name
+      'market_cap_basic',                  // d[2]
+      'price_earnings_ttm',               // d[3]
+      'price_book_ratio',                  // d[4]
+      'price_sales_current',               // d[5]
+      'enterprise_value_ebitda_ttm',       // d[6]
+      'gross_margin',                      // d[7]
+      'net_margin_ttm',                    // d[8]
+      'return_on_equity',                  // d[9]
+      'return_on_assets',                  // d[10]
+      'total_revenue',                     // d[11]
+      'revenue_growth_yoy',               // d[12]
+      'earnings_per_share_basic_ttm',      // d[13]
+      'total_debt',                        // d[14]
+      'cash_n_short_term_invest',          // d[15]
+      'current_ratio',                     // d[16]
+      'debt_to_equity',                    // d[17]
+      'dividend_yield_recent',             // d[18]
+      'beta_1_year',                       // d[19]
+      'total_shares_outstanding',          // d[20]
+      'number_of_employees',               // d[21]
+      'sector',                            // d[22]
+      'industry',                          // d[23]
+      'operating_margin',                  // d[24]
+      'earnings_per_share_forecast_next_fy', // d[25]
+      'earnings_per_share_diluted_yoy',    // d[26] earnings growth YoY
+      'price_book_fq',                     // d[27] P/B quarterly (fallback)
     ]
 
     const tvTicker = toTVTicker(ticker)
@@ -198,6 +218,8 @@ export async function getFundamentals(ticker) {
       dividendYield: v(d[18], true),
       beta: v(d[19]),
       sharesOutstanding: v(d[20]),
+      earningsGrowth: v(d[26], true),      // EPS YoY growth from TV Scanner
+      priceToBookQtr: v(d[27]),            // P/B quarterly fallback
       targetMeanPrice: null,
       analystRating: null,
       numberOfAnalysts: null,

@@ -79,11 +79,13 @@ function Panel({ title, right, children }) {
   )
 }
 
-export default function AnalysisPanel({ bars, fundamentals, quote, loading }) {
+export default function AnalysisPanel({ bars, fundamentals, quote, loading, srLevels: srLevelsProp }) {
+  // Use pre-computed 2Y-based levels if provided, else compute from display bars
   const srLevels = useMemo(() => {
+    if (srLevelsProp?.length) return srLevelsProp
     if (!bars?.length) return []
     return findSupportResistanceLevels(bars, { lookback: 10, maxLevels: 8 })
-  }, [bars])
+  }, [bars, srLevelsProp])
 
   const { resistance, support } = useMemo(() => {
     if (!quote?.price) return { resistance: [], support: [] }

@@ -381,6 +381,7 @@ function GroupedPositionRow({ group, totalValue, onDelete, onSold }) {
   const [showSell, setShowSell] = useState(false)
   const { ticker, name, price, totalShares, totalCost, currentValue, gain, gainPct, lots } = group
   const weight = totalValue > 0 ? (currentValue / totalValue) * 100 : 0
+  const hasPrice = price > 0
   const up = gain >= 0
 
   return (
@@ -428,22 +429,30 @@ function GroupedPositionRow({ group, totalValue, onDelete, onSold }) {
         {/* Current value */}
         <div style={{ textAlign: 'right', flexShrink: 0, minWidth: 80 }}>
           <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 2 }}>มูลค่า</div>
-          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-ink)' }}>{currentValue > 0 ? fmt.price(currentValue) : '—'}</div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-ink)' }}>
+            {hasPrice ? fmt.price(currentValue) : <span style={{ color: 'var(--text-tertiary)', fontWeight: 400 }}>กำลังโหลด...</span>}
+          </div>
         </div>
 
         {/* P&L */}
         <div style={{ textAlign: 'right', flexShrink: 0, minWidth: 90 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: up ? 'var(--up)' : 'var(--down)' }}>
-            {up ? '+' : ''}{fmt.price(gain)}
-          </div>
-          <div style={{
-            display: 'inline-block', fontSize: 11, fontWeight: 700,
-            padding: '1px 7px', borderRadius: 99, marginTop: 2,
-            background: up ? 'var(--up-bg)' : 'var(--down-bg)',
-            color: up ? 'var(--up)' : 'var(--down)',
-          }}>
-            {up ? '+' : ''}{gainPct?.toFixed(2)}%
-          </div>
+          {hasPrice ? (
+            <>
+              <div style={{ fontSize: 13, fontWeight: 700, color: up ? 'var(--up)' : 'var(--down)' }}>
+                {up ? '+' : ''}{fmt.price(gain)}
+              </div>
+              <div style={{
+                display: 'inline-block', fontSize: 11, fontWeight: 700,
+                padding: '1px 7px', borderRadius: 99, marginTop: 2,
+                background: up ? 'var(--up-bg)' : 'var(--down-bg)',
+                color: up ? 'var(--up)' : 'var(--down)',
+              }}>
+                {up ? '+' : ''}{gainPct?.toFixed(2)}%
+              </div>
+            </>
+          ) : (
+            <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>—</div>
+          )}
         </div>
 
         {/* Sell button */}
@@ -726,12 +735,15 @@ export default function PortfolioPage() {
 
       {positions.length > 0 && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 24 }}>
-          {[
-            { label: 'เงินลงทุนรวม', value: fmt.price(totalCost), color: 'var(--text-ink)' },
-            { label: 'มูลค่าปัจจุบัน', value: fmt.price(totalValue), color: 'var(--text-ink)' },
-            { label: 'กำไร/ขาดทุน', value: `${up ? '+' : ''}${fmt.price(totalGain)}`, color: up ? 'var(--up)' : 'var(--down)' },
-            { label: 'ผลตอบแทน', value: `${up ? '+' : ''}${totalGainPct.toFixed(2)}%`, color: up ? 'var(--up)' : 'var(--down)' },
-          ].map(({ label, value, color }) => (
+          {(() => {
+            const pricesLoaded = positions.some(p => p.price > 0)
+            return [
+              { label: 'เงินลงทุนรวม', value: fmt.price(totalCost), color: 'var(--text-ink)' },
+              { label: 'มูลค่าปัจจุบัน', value: pricesLoaded ? fmt.price(totalValue) : 'กำลังโหลด...', color: 'var(--text-ink)' },
+              { label: 'กำไร/ขาดทุน', value: pricesLoaded ? `${up ? '+' : ''}${fmt.price(totalGain)}` : '—', color: pricesLoaded ? (up ? 'var(--up)' : 'var(--down)') : 'var(--text-tertiary)' },
+              { label: 'ผลตอบแทน', value: pricesLoaded ? `${up ? '+' : ''}${totalGainPct.toFixed(2)}%` : '—', color: pricesLoaded ? (up ? 'var(--up)' : 'var(--down)') : 'var(--text-tertiary)' },
+            ]
+          })().map(({ label, value, color }) => (
             <div key={label} className="card" style={{ padding: '16px 18px', position: 'relative', overflow: 'hidden' }}>
               <div style={{ position: 'absolute', top: 0, right: 0, width: 80, height: 80, background: 'var(--primary)', opacity: 0.03, borderRadius: '50%', transform: 'translate(30%, -30%)' }} />
               <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 4 }}>{label}</div>

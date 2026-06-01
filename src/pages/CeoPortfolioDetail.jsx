@@ -10,6 +10,7 @@ function PortfolioGroupRow({ group, totalValue }) {
   const navigate = useNavigate()
   const { ticker, price, totalShares, totalCost, currentValue, gain, gainPct } = group
   const weight = totalValue > 0 ? (currentValue / totalValue) * 100 : 0
+  const hasPrice = price > 0
   const up = gain >= 0
 
   return (
@@ -47,22 +48,30 @@ function PortfolioGroupRow({ group, totalValue }) {
       {/* Current value */}
       <div style={{ textAlign: 'right', flexShrink: 0, minWidth: 80 }}>
         <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 2 }}>มูลค่า</div>
-        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-ink)' }}>{currentValue > 0 ? fmt.price(currentValue) : '—'}</div>
+        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-ink)' }}>
+          {hasPrice ? fmt.price(currentValue) : <span style={{ color: 'var(--text-tertiary)', fontWeight: 400 }}>—</span>}
+        </div>
       </div>
 
       {/* P&L */}
       <div style={{ textAlign: 'right', flexShrink: 0, minWidth: 90 }}>
-        <div style={{ fontSize: 13, fontWeight: 700, color: up ? 'var(--up)' : 'var(--down)' }}>
-          {up ? '+' : ''}{fmt.price(gain)}
-        </div>
-        <div style={{
-          display: 'inline-block', fontSize: 11, fontWeight: 700,
-          padding: '1px 7px', borderRadius: 99, marginTop: 2,
-          background: up ? 'var(--up-bg)' : 'var(--down-bg)',
-          color: up ? 'var(--up)' : 'var(--down)',
-        }}>
-          {up ? '+' : ''}{gainPct?.toFixed(2)}%
-        </div>
+        {hasPrice ? (
+          <>
+            <div style={{ fontSize: 13, fontWeight: 700, color: up ? 'var(--up)' : 'var(--down)' }}>
+              {up ? '+' : ''}{fmt.price(gain)}
+            </div>
+            <div style={{
+              display: 'inline-block', fontSize: 11, fontWeight: 700,
+              padding: '1px 7px', borderRadius: 99, marginTop: 2,
+              background: up ? 'var(--up-bg)' : 'var(--down-bg)',
+              color: up ? 'var(--up)' : 'var(--down)',
+            }}>
+              {up ? '+' : ''}{gainPct?.toFixed(2)}%
+            </div>
+          </>
+        ) : (
+          <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>—</div>
+        )}
       </div>
     </div>
   )
@@ -89,9 +98,8 @@ export default function CeoPortfolioDetail() {
 
   if (!data) return <div style={{ textAlign: 'center', marginTop: 40, color: 'var(--text-secondary)' }}>ไม่พบข้อมูล CEO Portfolio</div>
 
-  // CEO Portfolio returns aggregated positions already in the backend mock.
-  // We calculate Initial Capital as Total Value - Total Gain.
   const initialCapital = data.totalCost
+  const pricesLoaded = data.totalValue > 0
   const up = data.totalGain >= 0
 
   return (
@@ -120,9 +128,9 @@ export default function CeoPortfolioDetail() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 24 }}>
         {[
           { label: 'เงินต้นรวม', value: fmt.price(initialCapital), color: 'var(--text-ink)' },
-          { label: 'มูลค่าปัจจุบัน', value: fmt.price(data.totalValue), color: 'var(--text-ink)' },
-          { label: 'กำไร/ขาดทุนรวม', value: `${up ? '+' : ''}${fmt.price(data.totalGain)}`, color: up ? 'var(--up)' : 'var(--down)' },
-          { label: 'ผลตอบแทนรวม', value: `${up ? '+' : ''}${data.totalGainPct?.toFixed(2)}%`, color: up ? 'var(--up)' : 'var(--down)' },
+          { label: 'มูลค่าปัจจุบัน', value: pricesLoaded ? fmt.price(data.totalValue) : 'กำลังโหลด...', color: 'var(--text-ink)' },
+          { label: 'กำไร/ขาดทุนรวม', value: pricesLoaded ? `${up ? '+' : ''}${fmt.price(data.totalGain)}` : '—', color: pricesLoaded ? (up ? 'var(--up)' : 'var(--down)') : 'var(--text-tertiary)' },
+          { label: 'ผลตอบแทนรวม', value: pricesLoaded ? `${up ? '+' : ''}${data.totalGainPct?.toFixed(2)}%` : '—', color: pricesLoaded ? (up ? 'var(--up)' : 'var(--down)') : 'var(--text-tertiary)' },
         ].map(({ label, value, color }) => (
           <div key={label} className="card" style={{ padding: '16px 18px', position: 'relative', overflow: 'hidden' }}>
             <div style={{ position: 'absolute', top: 0, right: 0, width: 80, height: 80, background: 'var(--primary)', opacity: 0.03, borderRadius: '50%', transform: 'translate(30%, -30%)' }} />

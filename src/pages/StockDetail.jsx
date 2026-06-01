@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Star, StarOff, ExternalLink, PlusCircle, X, Check, Building2 } from 'lucide-react'
 import { stocksApi, portfolioApi } from '../api/client.js'
@@ -9,7 +9,7 @@ import FundamentalsPanel from '../components/FundamentalsPanel.jsx'
 import AnalysisPanel from '../components/AnalysisPanel.jsx'
 import { fmt } from '../utils/formatters.js'
 import { Skeleton } from '../components/MetricCard.jsx'
-import { findSupportResistanceLevels } from '../utils/analysis.js'
+import { findSupportResistanceLevels, splitLevels } from '../utils/analysis.js'
 
 const EXCHANGE_RATE_THB = 35.0
 
@@ -217,6 +217,16 @@ export default function StockDetail() {
     } catch {}
   }
 
+  // Compute chart-ready levels: filter ±20% proximity and reclassify by current price
+  const chartLevels = useMemo(() => {
+    if (!srLevels.length || !quote?.price) return []
+    const { resistance, support } = splitLevels(srLevels, quote.price)
+    return [
+      ...resistance.map(l => ({ ...l, type: 'resistance' })),
+      ...support.map(l => ({ ...l, type: 'support' })),
+    ].sort((a, b) => b.price - a.price)
+  }, [srLevels, quote])
+
   const up = (quote?.changePct ?? 0) >= 0
   const tabs = ['Overview', 'Fundamentals', 'About']
 
@@ -365,7 +375,7 @@ export default function StockDetail() {
           <div className="flex flex-col gap-4">
             <PriceChart
               bars={bars}
-              levels={srLevels}
+              levels={chartLevels}
               range={chartRange}
               onRangeChange={handleRangeChange}
               loading={loading.chart}
@@ -376,6 +386,7 @@ export default function StockDetail() {
               fundamentals={fundamentals}
               quote={quote}
               loading={loading.chart || loading.fundamentals}
+              srLevels={srLevels}
             />
           </div>
           <FundamentalsPanel fundamentals={fundamentals} loading={loading.fundamentals} />

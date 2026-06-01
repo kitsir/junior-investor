@@ -177,18 +177,25 @@ export function calculateFundamentalScore(f) {
   }
   breakdown.growth = Math.min(growth, 25)
 
-  // 3. Value (0-25)
+  // 3. Value (0-25) — uses trailing P/E or forward P/E as fallback
   let value = 0
-  if (f.trailingPE != null && f.trailingPE > 0) {
-    if (f.trailingPE < 12) value += 12
-    else if (f.trailingPE < 20) value += 9
-    else if (f.trailingPE < 30) value += 6
-    else if (f.trailingPE < 50) value += 3
+  const pe = (f.trailingPE != null && f.trailingPE > 0) ? f.trailingPE
+           : (f.forwardPE  != null && f.forwardPE  > 0) ? f.forwardPE : null
+  if (pe != null) {
+    if (pe < 12)  value += 12
+    else if (pe < 20) value += 9
+    else if (pe < 30) value += 6
+    else if (pe < 50) value += 4
+    else if (pe < 80) value += 2
+    // pe ≥ 80 = 0 pts (expensive but data IS present)
   }
-  if (f.priceToBook != null && f.priceToBook > 0) {
-    if (f.priceToBook < 1.5) value += 8
-    else if (f.priceToBook < 3) value += 5
-    else if (f.priceToBook < 6) value += 2
+  // Use TTM P/B, fall back to quarterly P/B
+  const pb = f.priceToBook ?? f.priceToBookQtr ?? null
+  if (pb != null && pb > 0) {
+    if (pb < 1.5) value += 8
+    else if (pb < 3) value += 5
+    else if (pb < 6) value += 2
+    else if (pb < 10) value += 1
   }
   if (f.enterpriseToEbitda != null && f.enterpriseToEbitda > 0) {
     if (f.enterpriseToEbitda < 10) value += 5
