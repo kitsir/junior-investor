@@ -112,39 +112,53 @@ function TickerSearch({ onSelect }) {
 
 function AddForm({ onAdd, onCancel }) {
   const [step, setStep] = useState('search') // 'search' | 'confirm'
-  const [selected, setSelected] = useState(null) // { ticker, name, price }
-  const [mode, setMode] = useState('thb') // 'thb' | 'shares'
+  const [selected, setSelected] = useState(null)
+  const [mode, setMode] = useState('thb')       // 'thb' | 'shares'
+  const [priceMode, setPriceMode] = useState('market') // 'market' | 'custom'
   const [inputValue, setInputValue] = useState('')
+  const [customPrice, setCustomPrice] = useState('')
   const [loading, setLoading] = useState(false)
 
   const handleSelect = (stock) => {
     setSelected(stock)
     setInputValue('')
+    setCustomPrice(stock.price > 0 ? stock.price.toFixed(2) : '')
     setStep('confirm')
   }
 
-  const price = selected?.price || 0
+  const marketPrice = selected?.price || 0
+  const effectivePrice = priceMode === 'market'
+    ? marketPrice
+    : (parseFloat(customPrice) || 0)
+
   let calculatedShares = 0
   let calculatedCostUSD = 0
 
   if (mode === 'thb') {
     const thbAmount = parseFloat(inputValue) || 0
     calculatedCostUSD = thbAmount / EXCHANGE_RATE_THB
-    calculatedShares = price > 0 ? calculatedCostUSD / price : 0
+    calculatedShares = effectivePrice > 0 ? calculatedCostUSD / effectivePrice : 0
   } else {
     calculatedShares = parseFloat(inputValue) || 0
-    calculatedCostUSD = calculatedShares * price
+    calculatedCostUSD = calculatedShares * effectivePrice
   }
+
+  // P&L preview when using custom price
+  const currentValue = calculatedShares * marketPrice
+  const unrealizedGain = priceMode === 'custom' && calculatedShares > 0 && marketPrice > 0
+    ? currentValue - calculatedCostUSD : null
+  const unrealizedGainPct = unrealizedGain != null && calculatedCostUSD > 0
+    ? (unrealizedGain / calculatedCostUSD) * 100 : null
 
   const submit = async (e) => {
     e.preventDefault()
-    if (!selected || calculatedShares <= 0 || price <= 0) return
+    if (!selected || calculatedShares <= 0 || effectivePrice <= 0) return
     setLoading(true)
     try {
       await onAdd({
         ticker: selected.ticker,
         shares: calculatedShares,
-        avg_cost: price, // Locked to market price
+        avg_cost: effectivePrice,
       })
     } finally { setLoading(false) }
   }
@@ -161,6 +175,7 @@ function AddForm({ onAdd, onCancel }) {
 
   return (
     <form onSubmit={submit} className="card" style={{ padding: '20px 22px' }}>
+      {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20, paddingBottom: 16, borderBottom: '1px solid var(--divider)' }}>
         <LogoAvatar ticker={selected.ticker} size={42} />
         <div style={{ flex: 1 }}>
@@ -168,79 +183,319 @@ function AddForm({ onAdd, onCancel }) {
           <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{selected.name}</div>
         </div>
         <div style={{ textAlign: 'right' }}>
-          <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 2 }}>ราคาตลาดปัจจุบัน</div>
-          <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--text-ink)' }}>{fmt.price(price)}</div>
+          <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 2 }}>ราคาตลาดตอนนี้</div>
+          <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--text-ink)' }}>{fmt.price(marketPrice)}</div>
         </div>
         <button type="button" onClick={() => setStep('search')} className="btn-ghost" style={{ fontSize: 12, padding: '4px 10px' }}>
           เปลี่ยนหุ้น
         </button>
       </div>
 
-      {/* Mode toggle */}
+      {/* Amount mode toggle */}
       <div style={{ display: 'flex', gap: 4, background: 'var(--divider)', padding: 4, borderRadius: 8, marginBottom: 16, width: 'fit-content' }}>
-        <button type="button" onClick={() => { setMode('thb'); setInputValue('') }} className="btn-ghost" style={{ background: mode === 'thb' ? 'var(--bg-card)' : 'transparent', border: mode === 'thb' ? '1px solid var(--border-color)' : 'none', color: mode === 'thb' ? 'var(--text-ink)' : 'var(--text-secondary)', padding: '6px 12px' }}>
-          เพิ่มด้วยเงิน (บาท)
-        </button>
-        <button type="button" onClick={() => { setMode('shares'); setInputValue('') }} className="btn-ghost" style={{ background: mode === 'shares' ? 'var(--bg-card)' : 'transparent', border: mode === 'shares' ? '1px solid var(--border-color)' : 'none', color: mode === 'shares' ? 'var(--text-ink)' : 'var(--text-secondary)', padding: '6px 12px' }}>
-          ระบุจำนวนหุ้น
-        </button>
+        {[['thb','เพิ่มด้วยเงิน (บาท)'],['shares','ระบุจำนวนหุ้น']].map(([v, label]) => (
+          <button key={v} type="button"
+            onClick={() => { setMode(v); setInputValue('') }}
+            className="btn-ghost"
+            style={{ background: mode === v ? 'var(--bg-card)' : 'transparent', border: mode === v ? '1px solid var(--border-color)' : 'none', color: mode === v ? 'var(--text-ink)' : 'var(--text-secondary)', padding: '6px 12px' }}>
+            {label}
+          </button>
+        ))}
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 16 }}>
+        {/* Amount / shares */}
         <div>
           <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 6 }}>
             {mode === 'thb' ? 'จำนวนเงินที่ลงทุน (บาท) *' : 'จำนวนหุ้น *'}
           </label>
           <input
             className="input"
-            type="number"
-            step="any"
-            min="0"
+            type="number" step="any" min="0"
             placeholder={mode === 'thb' ? 'เช่น 10,000' : 'เช่น 10, 0.5'}
             value={inputValue}
             onChange={e => setInputValue(e.target.value)}
-            autoFocus
-            required
+            autoFocus required
           />
         </div>
+
+        {/* Price — market or custom */}
         <div>
           <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 6 }}>
-            ราคาซื้อต่อหุ้น (USD) *
+            ราคาทุนต่อหุ้น (USD) *
           </label>
-          <input
-            className="input"
-            type="text"
-            value={fmt.price(price)}
-            disabled
-            style={{ opacity: 0.7, cursor: 'not-allowed' }}
-          />
-          <div style={{ fontSize: 11, color: 'var(--text-tertiary)', mt: 4 }}>
-            *ถูกล็อกไว้ที่ราคาตลาดจริง
+          {/* Toggle */}
+          <div style={{ display: 'flex', gap: 3, marginBottom: 6 }}>
+            {[['market',`ราคาตลาด`],['custom','กำหนดเอง (ย้อนหลัง)']].map(([v, label]) => (
+              <button key={v} type="button"
+                onClick={() => { setPriceMode(v); if (v === 'custom') setCustomPrice(marketPrice.toFixed(2)) }}
+                style={{
+                  fontSize: 11, fontWeight: 600, padding: '3px 9px', borderRadius: 6, cursor: 'pointer',
+                  background: priceMode === v ? 'var(--primary)' : 'var(--divider)',
+                  color: priceMode === v ? '#fff' : 'var(--text-secondary)',
+                  border: 'none',
+                }}>
+                {label}
+              </button>
+            ))}
           </div>
+          {priceMode === 'market' ? (
+            <div style={{ display: 'flex', alignItems: 'center', height: 38, padding: '0 12px', background: 'var(--divider)', borderRadius: 8, fontSize: 14, fontWeight: 700, color: 'var(--text-ink)' }}>
+              {fmt.price(marketPrice)}
+            </div>
+          ) : (
+            <input
+              className="input"
+              type="number" step="any" min="0.01"
+              placeholder={`เช่น ${marketPrice.toFixed(2)}`}
+              value={customPrice}
+              onChange={e => setCustomPrice(e.target.value)}
+            />
+          )}
         </div>
       </div>
 
-      {inputValue && calculatedShares > 0 && (
-        <div style={{ background: 'var(--primary-bg)', borderRadius: 12, padding: '12px 16px', marginBottom: 16, display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
+      {/* Preview */}
+      {calculatedShares > 0 && effectivePrice > 0 && (
+        <div style={{
+          background: unrealizedGain != null
+            ? (unrealizedGain >= 0 ? 'rgba(16,185,129,0.08)' : 'rgba(239,68,68,0.08)')
+            : 'var(--primary-bg)',
+          borderRadius: 12, padding: '12px 16px', marginBottom: 16,
+          display: 'grid', gridTemplateColumns: unrealizedGain != null ? 'repeat(3, 1fr)' : 'repeat(2, 1fr)', gap: 12,
+        }}>
           <div>
-            <div style={{ fontSize: 11, color: 'var(--primary)', marginBottom: 2 }}>จำนวนหุ้นที่ได้</div>
-            <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--primary)' }}>{calculatedShares.toFixed(6)} หุ้น</div>
+            <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 2 }}>จำนวนหุ้น</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-ink)' }}>{calculatedShares.toFixed(6)}</div>
           </div>
           <div>
-            <div style={{ fontSize: 11, color: 'var(--primary)', marginBottom: 2 }}>มูลค่ารวม (USD)</div>
-            <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--primary)' }}>{fmt.price(calculatedCostUSD)}</div>
-            <div style={{ fontSize: 11, color: 'var(--primary)', opacity: 0.8 }}>อัตราแลกเปลี่ยน {EXCHANGE_RATE_THB} บ./USD</div>
+            <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 2 }}>ต้นทุนรวม</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-ink)' }}>{fmt.price(calculatedCostUSD)}</div>
           </div>
+          {unrealizedGain != null && (
+            <div>
+              <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 2 }}>กำไร/ขาดทุนปัจจุบัน</div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: unrealizedGain >= 0 ? 'var(--up)' : 'var(--down)' }}>
+                {unrealizedGain >= 0 ? '+' : ''}{fmt.price(unrealizedGain)}
+                <span style={{ fontSize: 11, marginLeft: 4 }}>
+                  ({unrealizedGainPct >= 0 ? '+' : ''}{unrealizedGainPct?.toFixed(1)}%)
+                </span>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
       <div style={{ display: 'flex', gap: 8 }}>
-        <button type="submit" disabled={loading || calculatedShares <= 0} className="btn-primary">
-          {loading ? 'กำลังเพิ่ม...' : `เพิ่มเข้าพอร์ต`}
+        <button type="submit" disabled={loading || calculatedShares <= 0 || effectivePrice <= 0} className="btn-primary">
+          {loading ? 'กำลังเพิ่ม...' : 'เพิ่มเข้าพอร์ต'}
         </button>
         <button type="button" onClick={onCancel} className="btn-ghost">ยกเลิก</button>
       </div>
     </form>
+  )
+}
+
+// ─── Batch Import Modal ────────────────────────────────────────────────────────
+function BatchImportModal({ onClose, onImported }) {
+  const emptyRow = () => ({ id: Date.now() + Math.random(), ticker: '', shares: '', price: '', name: '', marketPrice: null, loading: false })
+  const [rows, setRows] = useState([emptyRow()])
+  const [submitting, setSubmitting] = useState(false)
+  const [done, setDone] = useState(false)
+
+  const updateRow = (id, patch) =>
+    setRows(r => r.map(row => row.id === id ? { ...row, ...patch } : row))
+
+  const fetchQuote = async (id, ticker) => {
+    if (!ticker.trim()) return
+    const sym = ticker.trim().toUpperCase()
+    updateRow(id, { loading: true, ticker: sym })
+    try {
+      const data = await stocksApi.quote(sym)
+      const q = data.quote
+      updateRow(id, {
+        name: q.name || sym,
+        marketPrice: q.price,
+        price: '', // let user fill in their own cost
+        loading: false,
+      })
+    } catch {
+      updateRow(id, { loading: false, name: 'ไม่พบข้อมูล' })
+    }
+  }
+
+  const addRow = () => setRows(r => [...r, emptyRow()])
+  const removeRow = (id) => setRows(r => r.length > 1 ? r.filter(x => x.id !== id) : r)
+
+  const validRows = rows.filter(r =>
+    r.ticker.trim() && parseFloat(r.shares) > 0 && parseFloat(r.price) > 0
+  )
+
+  const totalCost = validRows.reduce((s, r) =>
+    s + parseFloat(r.shares) * parseFloat(r.price), 0)
+
+  const submit = async () => {
+    if (!validRows.length) return
+    setSubmitting(true)
+    try {
+      for (const row of validRows) {
+        await portfolioApi.addPosition({
+          ticker: row.ticker.toUpperCase(),
+          shares: parseFloat(row.shares),
+          avg_cost: parseFloat(row.price),
+        })
+      }
+      setDone(true)
+      setTimeout(() => { onImported(); onClose() }, 1200)
+    } catch (e) {
+      console.error('Import error', e)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
+      onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="card" style={{ padding: '24px', width: 700, maxWidth: '100%', maxHeight: '88vh', display: 'flex', flexDirection: 'column' }}>
+        {/* Header */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4, flexShrink: 0 }}>
+          <div>
+            <h3 style={{ fontSize: 20, fontWeight: 800, color: 'var(--text-ink)', margin: 0, letterSpacing: '-0.025em' }}>
+              📋 นำเข้าพอร์ต (Clone)
+            </h3>
+            <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '6px 0 0', lineHeight: 1.5 }}>
+              ใส่หุ้นพร้อม<strong>ราคาทุนจริงที่คุณซื้อ</strong> ระบบจะคำนวณ P&amp;L เทียบกับราคาตลาดปัจจุบัน
+            </p>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-tertiary)', padding: 4 }}>
+            <X size={18} />
+          </button>
+        </div>
+
+        <div style={{ height: 1, background: 'var(--divider)', margin: '16px 0', flexShrink: 0 }} />
+
+        {/* Column headers */}
+        <div style={{ display: 'grid', gridTemplateColumns: '90px 1fr 110px 120px 36px', gap: 8, padding: '0 4px', marginBottom: 8, flexShrink: 0 }}>
+          {['Ticker', 'ชื่อบริษัท (ราคาตลาด)', 'จำนวนหุ้น', 'ราคาทุน/หุ้น', ''].map(h => (
+            <div key={h} style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{h}</div>
+          ))}
+        </div>
+
+        {/* Rows — scrollable */}
+        <div style={{ overflowY: 'auto', flex: 1, paddingRight: 2 }}>
+          {rows.map((row, idx) => (
+            <div key={row.id} style={{ display: 'grid', gridTemplateColumns: '90px 1fr 110px 120px 36px', gap: 8, marginBottom: 8, alignItems: 'center' }}>
+              {/* Ticker */}
+              <div style={{ position: 'relative' }}>
+                <input
+                  className="input"
+                  value={row.ticker}
+                  onChange={e => updateRow(row.id, { ticker: e.target.value.toUpperCase() })}
+                  onBlur={e => { if (e.target.value.trim()) fetchQuote(row.id, e.target.value) }}
+                  placeholder="AAPL"
+                  style={{ fontSize: 13, fontWeight: 700, textTransform: 'uppercase' }}
+                  autoFocus={idx === 0}
+                />
+                {row.loading && (
+                  <div style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', width: 10, height: 10, border: '2px solid var(--primary)', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }} />
+                )}
+              </div>
+
+              {/* Name + market price hint */}
+              <div style={{ overflow: 'hidden' }}>
+                {row.name ? (
+                  <div>
+                    <div style={{ fontSize: 12, color: 'var(--text-ink)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.name}</div>
+                    {row.marketPrice && (
+                      <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>ตลาด: {fmt.price(row.marketPrice)}</div>
+                    )}
+                  </div>
+                ) : (
+                  <div style={{ fontSize: 12, color: 'var(--text-tertiary)', fontStyle: 'italic' }}>
+                    {row.ticker ? 'กด Tab เพื่อดึงข้อมูล' : '—'}
+                  </div>
+                )}
+              </div>
+
+              {/* Shares */}
+              <input
+                className="input"
+                type="number" step="any" min="0"
+                value={row.shares}
+                onChange={e => updateRow(row.id, { shares: e.target.value })}
+                placeholder="เช่น 10"
+                style={{ fontSize: 13 }}
+              />
+
+              {/* Cost price */}
+              <div style={{ position: 'relative' }}>
+                <span style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-tertiary)', fontSize: 13, pointerEvents: 'none' }}>$</span>
+                <input
+                  className="input"
+                  type="number" step="any" min="0"
+                  value={row.price}
+                  onChange={e => updateRow(row.id, { price: e.target.value })}
+                  placeholder={row.marketPrice ? row.marketPrice.toFixed(2) : '0.00'}
+                  style={{ fontSize: 13, paddingLeft: 22 }}
+                />
+              </div>
+
+              {/* Remove */}
+              <button
+                onClick={() => removeRow(row.id)}
+                style={{ background: 'none', border: 'none', cursor: rows.length === 1 ? 'not-allowed' : 'pointer', color: rows.length === 1 ? 'var(--border-color)' : 'var(--text-tertiary)', padding: 4, display: 'flex', alignItems: 'center', borderRadius: 6 }}
+                onMouseEnter={e => { if (rows.length > 1) e.currentTarget.style.color = 'var(--down)' }}
+                onMouseLeave={e => e.currentTarget.style.color = rows.length === 1 ? 'var(--border-color)' : 'var(--text-tertiary)'}
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
+          ))}
+
+          {/* Add row button */}
+          <button
+            onClick={addRow}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', justifyContent: 'center', padding: '9px', borderRadius: 8, border: '1.5px dashed var(--border-color)', background: 'transparent', cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 13, marginTop: 4 }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--primary)'; e.currentTarget.style.color = 'var(--primary)' }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border-color)'; e.currentTarget.style.color = 'var(--text-secondary)' }}
+          >
+            <Plus size={14} /> เพิ่มแถว
+          </button>
+        </div>
+
+        {/* Footer */}
+        <div style={{ flexShrink: 0, marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--divider)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            {validRows.length > 0 ? (
+              <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                <span style={{ fontWeight: 700, color: 'var(--text-ink)' }}>{validRows.length}</span> รายการ · ต้นทุนรวม{' '}
+                <span style={{ fontWeight: 700, color: 'var(--text-ink)' }}>{fmt.price(totalCost)}</span>
+              </div>
+            ) : (
+              <div style={{ fontSize: 13, color: 'var(--text-tertiary)' }}>กรอก Ticker, จำนวนหุ้น และราคาทุนให้ครบทุกช่อง</div>
+            )}
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={onClose} className="btn-ghost">ยกเลิก</button>
+            {done ? (
+              <button className="btn-primary" style={{ background: 'var(--up)', cursor: 'default' }}>
+                ✓ นำเข้าสำเร็จ!
+              </button>
+            ) : (
+              <button
+                onClick={submit}
+                disabled={submitting || validRows.length === 0}
+                className="btn-primary"
+                style={{ opacity: submitting || !validRows.length ? 0.6 : 1 }}
+              >
+                {submitting ? 'กำลังนำเข้า...' : `นำเข้า ${validRows.length || ''} รายการ`}
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -512,6 +767,7 @@ export default function PortfolioPage() {
   const [positions, setPositions] = useState([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
+  const [showBatchImport, setShowBatchImport] = useState(false)
   const [showAuthModal, setShowAuthModal] = useState(false)
   const [isPublic, setIsPublic] = useState(false)
   const [toggleLoading, setToggleLoading] = useState(false)
@@ -680,7 +936,14 @@ export default function PortfolioPage() {
           <button onClick={() => setShowProfile(true)} className="btn-ghost" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, padding: '6px 14px' }}>
             <span style={{ fontSize: 16 }}>{user.avatarEmoji || '🧑‍💻'}</span> โปรไฟล์
           </button>
-          <button onClick={() => setShowForm(!showForm)} className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <button
+            onClick={() => { setShowBatchImport(true); setShowForm(false) }}
+            className="btn-ghost"
+            style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1px solid var(--border-color)' }}
+          >
+            📋 นำเข้าพอร์ต
+          </button>
+          <button onClick={() => { setShowForm(!showForm); setShowBatchImport(false) }} className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <Plus size={14} /> เพิ่มการลงทุน
           </button>
         </div>
@@ -725,6 +988,13 @@ export default function PortfolioPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {showBatchImport && (
+        <BatchImportModal
+          onClose={() => setShowBatchImport(false)}
+          onImported={() => { setShowBatchImport(false); loadPositions() }}
+        />
       )}
 
       {showForm && (

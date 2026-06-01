@@ -14,29 +14,37 @@ import { findSupportResistanceLevels, splitLevels } from '../utils/analysis.js'
 const EXCHANGE_RATE_THB = 35.0
 
 function QuickAddForm({ ticker, price, onClose, onAdded }) {
-  const [mode, setMode] = useState('thb') // 'thb' | 'shares'
+  const [mode, setMode] = useState('thb')          // 'thb' | 'shares'
+  const [priceMode, setPriceMode] = useState('market') // 'market' | 'custom'
   const [inputValue, setInputValue] = useState('')
+  const [customPrice, setCustomPrice] = useState(price > 0 ? price.toFixed(2) : '')
   const [loading, setLoading] = useState(false)
   const [done, setDone] = useState(false)
-  
+
+  const effectivePrice = priceMode === 'market' ? price : (parseFloat(customPrice) || 0)
+
   let calculatedShares = 0
   let calculatedCostUSD = 0
-
   if (mode === 'thb') {
     const thbAmount = parseFloat(inputValue) || 0
     calculatedCostUSD = thbAmount / EXCHANGE_RATE_THB
-    calculatedShares = price > 0 ? calculatedCostUSD / price : 0
+    calculatedShares = effectivePrice > 0 ? calculatedCostUSD / effectivePrice : 0
   } else {
     calculatedShares = parseFloat(inputValue) || 0
-    calculatedCostUSD = calculatedShares * price
+    calculatedCostUSD = calculatedShares * effectivePrice
   }
+
+  const unrealizedGain = priceMode === 'custom' && calculatedShares > 0 && price > 0
+    ? calculatedShares * price - calculatedCostUSD : null
+  const unrealizedPct = unrealizedGain != null && calculatedCostUSD > 0
+    ? (unrealizedGain / calculatedCostUSD) * 100 : null
 
   const submit = async (e) => {
     e.preventDefault()
-    if (calculatedShares <= 0 || !price) return
+    if (calculatedShares <= 0 || effectivePrice <= 0) return
     setLoading(true)
     try {
-      await portfolioApi.addPosition({ ticker, shares: calculatedShares, avg_cost: price })
+      await portfolioApi.addPosition({ ticker, shares: calculatedShares, avg_cost: effectivePrice })
       setDone(true)
       setTimeout(onClose, 1500)
       onAdded?.()
@@ -44,55 +52,88 @@ function QuickAddForm({ ticker, price, onClose, onAdded }) {
   }
 
   return (
-    <form onSubmit={submit} className="absolute top-full right-0 mt-2 z-[200] bg-surface rounded-xl p-4 w-[320px] shadow-card-lg border border-color">
-      <div className="flex justify-between items-center mb-3">
+    <form onSubmit={submit} className="absolute top-full right-0 mt-2 z-[200] bg-surface rounded-xl p-4 w-[340px] shadow-card-lg border border-color">
+      <div className="flex justify-between items-center mb-2">
         <div className="text-[14px] font-bold text-ink">เพิ่ม {ticker} เข้าพอร์ต</div>
         <button type="button" onClick={onClose} className="btn-icon w-6 h-6"><X size={14} /></button>
       </div>
-      <div className="text-[13px] text-secondary mb-3">
-        ราคาตลาด: <strong className="text-ink">{fmt.price(price)}</strong>
+      <div className="text-[12px] text-secondary mb-3">ราคาตลาด: <strong className="text-ink">{fmt.price(price)}</strong></div>
+
+      {/* Amount mode */}
+      <div style={{ display: 'flex', gap: 4, background: 'var(--divider)', padding: 3, borderRadius: 7, marginBottom: 10 }}>
+        {[['thb','เงินบาท'],['shares','จำนวนหุ้น']].map(([v, label]) => (
+          <button key={v} type="button"
+            onClick={() => { setMode(v); setInputValue('') }}
+            className="btn-ghost flex-1 text-center"
+            style={{ fontSize: 12, background: mode === v ? 'var(--bg-card)' : 'transparent', color: mode === v ? 'var(--text-ink)' : 'var(--text-secondary)' }}>
+            {label}
+          </button>
+        ))}
       </div>
-      
-      {/* Mode toggle */}
-      <div style={{ display: 'flex', gap: 4, background: 'var(--divider)', padding: 4, borderRadius: 8, marginBottom: 12 }}>
-        <button type="button" onClick={() => { setMode('thb'); setInputValue('') }} className="btn-ghost flex-1 text-center" style={{ background: mode === 'thb' ? 'var(--bg-card)' : 'transparent', color: mode === 'thb' ? 'var(--text-ink)' : 'var(--text-secondary)' }}>
-          เป็นเงินบาท
-        </button>
-        <button type="button" onClick={() => { setMode('shares'); setInputValue('') }} className="btn-ghost flex-1 text-center" style={{ background: mode === 'shares' ? 'var(--bg-card)' : 'transparent', color: mode === 'shares' ? 'var(--text-ink)' : 'var(--text-secondary)' }}>
-          ระบุจำนวนหุ้น
-        </button>
-      </div>
-      
+
       <input
-        className="input mb-3"
-        type="number"
-        step="any"
-        min="0"
+        className="input mb-2"
+        type="number" step="any" min="0"
         placeholder={mode === 'thb' ? 'จำนวนเงิน (บาท)' : 'จำนวนหุ้น'}
         value={inputValue}
         onChange={e => setInputValue(e.target.value)}
         autoFocus
       />
-      
-      {inputValue && calculatedShares > 0 && (
-        <div className="bg-primary-bg rounded-lg p-2.5 mb-3">
-          <div className="flex justify-between text-[12px] mb-1">
-            <span className="text-primary opacity-80">ได้หุ้น:</span>
-            <strong className="text-primary">{calculatedShares.toFixed(6)} หุ้น</strong>
+
+      {/* Price mode */}
+      <div style={{ marginBottom: 10 }}>
+        <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginBottom: 4 }}>ราคาทุน:</div>
+        <div style={{ display: 'flex', gap: 4, marginBottom: 6 }}>
+          {[['market','ราคาตลาด'],['custom','กำหนดเอง']].map(([v, label]) => (
+            <button key={v} type="button"
+              onClick={() => { setPriceMode(v); if (v === 'custom') setCustomPrice(price.toFixed(2)) }}
+              style={{ flex: 1, fontSize: 11, fontWeight: 600, padding: '4px 0', borderRadius: 6, cursor: 'pointer', background: priceMode === v ? 'var(--primary)' : 'var(--divider)', color: priceMode === v ? '#fff' : 'var(--text-secondary)', border: 'none' }}>
+              {label}
+            </button>
+          ))}
+        </div>
+        {priceMode === 'custom' && (
+          <input
+            className="input"
+            type="number" step="any" min="0.01"
+            placeholder={price.toFixed(2)}
+            value={customPrice}
+            onChange={e => setCustomPrice(e.target.value)}
+            style={{ fontSize: 13 }}
+          />
+        )}
+      </div>
+
+      {calculatedShares > 0 && effectivePrice > 0 && (
+        <div style={{
+          background: unrealizedGain != null ? (unrealizedGain >= 0 ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.08)') : 'var(--primary-bg)',
+          borderRadius: 9, padding: '10px 12px', marginBottom: 10, fontSize: 12
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+            <span style={{ color: 'var(--text-secondary)' }}>ได้หุ้น</span>
+            <strong style={{ color: 'var(--text-ink)' }}>{calculatedShares.toFixed(4)} หุ้น</strong>
           </div>
-          <div className="flex justify-between text-[12px]">
-            <span className="text-primary opacity-80">ต้นทุน:</span>
-            <strong className="text-primary">{fmt.price(calculatedCostUSD)}</strong>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: unrealizedGain != null ? 4 : 0 }}>
+            <span style={{ color: 'var(--text-secondary)' }}>ต้นทุนรวม</span>
+            <strong style={{ color: 'var(--text-ink)' }}>{fmt.price(calculatedCostUSD)}</strong>
           </div>
+          {unrealizedGain != null && (
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span style={{ color: 'var(--text-secondary)' }}>กำไร/ขาดทุน</span>
+              <strong style={{ color: unrealizedGain >= 0 ? 'var(--up)' : 'var(--down)' }}>
+                {unrealizedGain >= 0 ? '+' : ''}{fmt.price(unrealizedGain)} ({unrealizedPct >= 0 ? '+' : ''}{unrealizedPct?.toFixed(1)}%)
+              </strong>
+            </div>
+          )}
         </div>
       )}
-      
+
       {done ? (
         <div className="flex items-center gap-1.5 text-[#10B981] text-[13px] font-semibold justify-center py-2">
           <Check size={16} /> เพิ่มเข้าพอร์ตแล้ว!
         </div>
       ) : (
-        <button type="submit" disabled={loading || calculatedShares <= 0} className="btn-primary w-full justify-center">
+        <button type="submit" disabled={loading || calculatedShares <= 0 || effectivePrice <= 0} className="btn-primary w-full justify-center">
           {loading ? 'กำลังเพิ่ม...' : 'เพิ่มเข้าพอร์ต'}
         </button>
       )}
