@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Trash2, Search, LogIn, Share2, Eye, EyeOff, ChevronDown, ChevronRight, Activity, TrendingDown } from 'lucide-react'
+import { Plus, Trash2, Search, LogIn, Share2, Eye, EyeOff, ChevronDown, ChevronRight, Activity, TrendingDown, X } from 'lucide-react'
 import { portfolioApi, stocksApi, authApi } from '../api/client.js'
 import useAuth from '../store/useAuth.js'
 import AuthModal from '../components/AuthModal.jsx'
