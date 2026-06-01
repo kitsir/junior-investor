@@ -63,10 +63,10 @@ export async function getFundamentals(ticker) {
     const ap = data.assetProfile || {}
     const quote = await getQuote(ticker)
     return buildFundamentals(ticker, quote.name, ap, fd, ks, sd)
-  } catch {
+  } catch (err) {
     // Fallback: return just quote data
     const quote = await getQuote(ticker)
-    return { ticker, name: quote.name, marketCap: null }
+    return { ticker, name: quote.name, marketCap: null, description: `Error fetching fundamentals: ${err.message}` }
   }
 }
 
