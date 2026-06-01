@@ -55,44 +55,84 @@ export async function getChart(ticker, range = '1y', interval = '1d') {
 
 export async function getFundamentals(ticker) {
   try {
-    const modules = ['summaryDetail', 'defaultKeyStatistics', 'financialData', 'assetProfile']
-    const data = await yahooFinance.quoteSummary(ticker, { modules })
-    const fd = data.financialData || {}
-    const ks = data.defaultKeyStatistics || {}
-    const sd = data.summaryDetail || {}
-    const ap = data.assetProfile || {}
+    const columns = [
+      'name', 'description', 'market_cap_basic', 'price_earnings_ttm',
+      'price_book_ratio', 'price_sales_current', 'enterprise_value_ebitda_ttm',
+      'gross_margin', 'net_margin_ttm', 'return_on_equity', 'return_on_assets',
+      'total_revenue', 'revenue_growth_yoy', 'earnings_per_share_basic_ttm',
+      'total_debt', 'cash_n_short_term_invest', 'current_ratio', 'debt_to_equity',
+      'dividend_yield_recent', 'beta_1_year', 'total_shares_outstanding',
+      'number_of_employees', 'sector', 'industry'
+    ]
+    
+    // Some tickers from Yahoo like PTT.BK need to be stripped of .BK or mapped
+    // But TradingView can usually find them by their short name.
+    const cleanTicker = ticker.split('.')[0]
+    
+    const body = {
+      filter: [{ left: 'name', operation: 'equal', right: cleanTicker }],
+      sort: { sortBy: 'average_volume_10d_calc', sortOrder: 'desc' },
+      columns: columns
+    }
+
+    const res = await fetch('https://scanner.tradingview.com/global/scan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    })
+    
+    if (!res.ok) throw new Error('TV API Error')
+    const json = await res.json()
+    if (!json.data || json.data.length === 0) throw new Error('Not found in TV')
+    
+    const d = json.data[0].d
+    const v = (val, isPct = false) => val ? (isPct ? val / 100 : val) : null
     const quote = await getQuote(ticker)
-    return buildFundamentals(ticker, quote.name, ap, fd, ks, sd)
+
+    return {
+      ticker: ticker,
+      name: d[1] || quote.name,
+      sector: d[22],
+      industry: d[23],
+      description: 'Data provided by TradingView Scanner API.', // We don't have full business description from TV
+      marketCap: v(d[2]),
+      trailingPE: v(d[3]),
+      forwardPE: null,
+      priceToBook: v(d[4]),
+      priceToSales: v(d[5]),
+      enterpriseToEbitda: v(d[6]),
+      pegRatio: null,
+      grossMargins: v(d[7], true),
+      profitMargins: v(d[8], true),
+      operatingMargins: null,
+      returnOnEquity: v(d[9], true),
+      returnOnAssets: v(d[10], true),
+      totalRevenue: v(d[11]),
+      revenueGrowth: v(d[12], true),
+      earningsGrowth: null,
+      eps: v(d[13]),
+      forwardEps: null,
+      ebitda: null,
+      totalDebt: v(d[14]),
+      currentRatio: v(d[16]),
+      totalCash: v(d[15]),
+      debtToEquity: v(d[17]),
+      bookValue: null,
+      freeCashflow: null,
+      operatingCashflow: null,
+      dividendRate: null,
+      dividendYield: v(d[18], true),
+      beta: v(d[19]),
+      sharesOutstanding: v(d[20]),
+      targetMeanPrice: null,
+      analystRating: null,
+      numberOfAnalysts: null,
+      employees: v(d[21])
+    }
   } catch (err) {
     // Fallback: return just quote data
     const quote = await getQuote(ticker)
     return { ticker, name: quote.name, marketCap: null, description: `Error fetching fundamentals: ${err.message}` }
-  }
-}
-
-function buildFundamentals(ticker, name, ap, fd, ks, sd) {
-  const v = (x) => (typeof x === 'object' && x !== null) ? (x.raw ?? x) : x
-  return {
-    ticker, name, sector: ap.sector, industry: ap.industry,
-    description: ap.longBusinessSummary?.slice(0, 600),
-    employees: ap.fullTimeEmployees, website: ap.website, country: ap.country,
-    trailingPE: v(ks.trailingPE) || v(sd.trailingPE),
-    forwardPE: v(ks.forwardPE) || v(sd.forwardPE),
-    priceToBook: v(ks.priceToBook), priceToSales: v(ks.priceToSalesTrailing12Months),
-    enterpriseToEbitda: v(ks.enterpriseToEbitda), pegRatio: v(ks.pegRatio),
-    profitMargins: v(fd.profitMargins) || v(ks.profitMargins),
-    grossMargins: v(fd.grossMargins), operatingMargins: v(fd.operatingMargins),
-    returnOnEquity: v(fd.returnOnEquity), returnOnAssets: v(fd.returnOnAssets),
-    revenueGrowth: v(fd.revenueGrowth), earningsGrowth: v(fd.earningsGrowth),
-    eps: v(ks.trailingEps), forwardEps: v(ks.forwardEps),
-    totalRevenue: v(fd.totalRevenue), ebitda: v(fd.ebitda),
-    debtToEquity: v(fd.debtToEquity), currentRatio: v(fd.currentRatio),
-    totalCash: v(fd.totalCash), totalDebt: v(fd.totalDebt), bookValue: v(ks.bookValue),
-    freeCashflow: v(fd.freeCashflow), operatingCashflow: v(fd.operatingCashflow),
-    dividendRate: v(sd.dividendRate), dividendYield: v(sd.dividendYield),
-    beta: v(sd.beta), sharesOutstanding: v(ks.sharesOutstanding),
-    targetMeanPrice: v(fd.targetMeanPrice), analystRating: fd.recommendationKey,
-    numberOfAnalysts: v(fd.numberOfAnalystOpinions),
   }
 }
 
