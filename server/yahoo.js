@@ -249,7 +249,7 @@ export async function getFundamentals(ticker) {
 export async function search(q) {
   const data = await yfFetch(`/v1/finance/search?q=${encodeURIComponent(q)}&newsCount=0&quotesCount=8`)
   return (data.quotes || [])
-    .filter(r => r.quoteType === 'EQUITY')
+    .filter(r => ['EQUITY', 'ETF', 'MUTUALFUND'].includes(r.quoteType))
     .map(r => ({ ticker: r.symbol, name: r.shortname || r.longname, exchange: r.exchDisp }))
 }
 

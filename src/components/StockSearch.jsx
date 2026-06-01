@@ -48,7 +48,7 @@ export default function StockSearch() {
           className="absolute left-3 text-tertiary pointer-events-none"
         />
         <input
-          className="w-full py-1.5 pl-9 pr-3 rounded-md border border-[rgba(255,255,255,0.12)] bg-[rgba(255,255,255,0.03)] text-[14px] text-ink outline-none transition-all focus:border-[#3B82F6] focus:bg-[rgba(15,17,21,0.9)] focus:shadow-[0_0_0_3px_rgba(59,130,246,0.15)] placeholder:text-tertiary"
+          className="w-full py-1.5 pl-9 pr-3 rounded-md border border-[rgba(255,255,255,0.2)] bg-[rgba(255,255,255,0.12)] text-[14px] text-ink outline-none transition-all focus:border-[#3B82F6] focus:bg-[rgba(255,255,255,0.18)] focus:shadow-[0_0_0_3px_rgba(59,130,246,0.15)] placeholder:text-tertiary"
           placeholder="Search ticker or company..."
           value={query}
           onChange={e => setQuery(e.target.value)}
