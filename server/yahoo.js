@@ -1,65 +1,35 @@
-// Direct Yahoo Finance fetch — bypasses yahoo-finance2 library
-// Handles cookie + crumb auth required by Yahoo Finance API
-
-const BASE_HEADERS = {
+// Direct Yahoo Finance fetch — no cookie/crumb needed for v8 chart endpoints
+const HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-  'Accept': 'application/json, text/plain, */*',
+  'Accept': 'application/json',
   'Accept-Language': 'en-US,en;q=0.9',
-  'Origin': 'https://finance.yahoo.com',
-  'Referer': 'https://finance.yahoo.com/',
 }
 
-let _cookie = null
-let _crumb = null
-let _cookieExpiry = 0
-
-async function getCookieAndCrumb() {
-  if (_crumb && Date.now() < _cookieExpiry) return { cookie: _cookie, crumb: _crumb }
-
-  // Step 1: get cookie
-  const r1 = await fetch('https://finance.yahoo.com', { headers: BASE_HEADERS })
-  const cookies = r1.headers.getSetCookie?.() || []
-  _cookie = cookies.map(c => c.split(';')[0]).join('; ')
-
-  // Step 2: get crumb
-  const r2 = await fetch('https://query2.finance.yahoo.com/v1/test/getcrumb', {
-    headers: { ...BASE_HEADERS, Cookie: _cookie }
-  })
-  _crumb = await r2.text()
-  _cookieExpiry = Date.now() + 30 * 60 * 1000 // 30 min
-
-  return { cookie: _cookie, crumb: _crumb }
-}
-
-async function yfFetch(url) {
-  const { cookie, crumb } = await getCookieAndCrumb()
-  const sep = url.includes('?') ? '&' : '?'
-  const res = await fetch(`${url}${sep}crumb=${encodeURIComponent(crumb)}`, {
-    headers: { ...BASE_HEADERS, Cookie: cookie }
-  })
-  if (!res.ok) throw new Error(`Yahoo Finance ${res.status}: ${url}`)
+async function yf(url) {
+  const res = await fetch(url, { headers: HEADERS })
+  if (!res.ok) throw new Error(`Yahoo ${res.status} ${url.split('?')[0]}`)
   return res.json()
 }
 
 export async function getQuote(ticker) {
-  const data = await yfFetch(`https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=1d&includePrePost=false`)
-  const r = data.chart.result[0]
-  const meta = r.meta
+  const data = await yf(`https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=1d&includePrePost=false`)
+  const meta = data.chart.result[0].meta
+  const prev = meta.previousClose || meta.chartPreviousClose || meta.regularMarketPrice
   return {
     ticker: meta.symbol,
     name: meta.longName || meta.shortName || ticker,
     price: meta.regularMarketPrice,
-    open: meta.regularMarketDayHigh, // approximation
+    open: meta.regularMarketOpen || meta.regularMarketPrice,
     high: meta.regularMarketDayHigh,
     low: meta.regularMarketDayLow,
-    prevClose: meta.previousClose || meta.chartPreviousClose,
+    prevClose: prev,
     volume: meta.regularMarketVolume,
-    change: meta.regularMarketPrice - (meta.previousClose || meta.chartPreviousClose),
-    changePct: ((meta.regularMarketPrice - (meta.previousClose || meta.chartPreviousClose)) / (meta.previousClose || meta.chartPreviousClose)) * 100,
+    change: meta.regularMarketPrice - prev,
+    changePct: ((meta.regularMarketPrice - prev) / prev) * 100,
     week52High: meta.fiftyTwoWeekHigh,
     week52Low: meta.fiftyTwoWeekLow,
     currency: meta.currency,
-    exchange: meta.exchangeName,
+    exchange: meta.fullExchangeName || meta.exchangeName,
     marketCap: null,
     trailingPE: null,
     eps: null,
@@ -69,64 +39,70 @@ export async function getQuote(ticker) {
 export async function getChart(ticker, range = '1y', interval = '1d') {
   const RANGE_TO_DAYS = { '1mo': 31, '3mo': 92, '6mo': 183, '1y': 365, '2y': 730, '5y': 1825 }
   const days = RANGE_TO_DAYS[range] || 365
-  const period1 = Math.floor((Date.now() - days * 86400000) / 1000)
-  const period2 = Math.floor(Date.now() / 1000)
-  const data = await yfFetch(`https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=${interval}&period1=${period1}&period2=${period2}&includePrePost=false`)
+  const p1 = Math.floor((Date.now() - days * 86400000) / 1000)
+  const p2 = Math.floor(Date.now() / 1000)
+  const data = await yf(`https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=${interval}&period1=${p1}&period2=${p2}&includePrePost=false`)
   const r = data.chart.result[0]
   const times = r.timestamp || []
-  const ohlcv = r.indicators.quote[0]
+  const q = r.indicators.quote[0]
   return times.map((t, i) => ({
-    time: t,
-    open: ohlcv.open[i],
-    high: ohlcv.high[i],
-    low: ohlcv.low[i],
-    close: ohlcv.close[i],
-    volume: ohlcv.volume[i] || 0,
-  })).filter(b => b.open && b.high && b.low && b.close)
+    time: t, open: q.open[i], high: q.high[i], low: q.low[i], close: q.close[i], volume: q.volume[i] || 0,
+  })).filter(b => b.open && b.close)
 }
 
 export async function getFundamentals(ticker) {
-  const modules = ['summaryDetail', 'defaultKeyStatistics', 'financialData', 'assetProfile']
-  const data = await yfFetch(`https://query1.finance.yahoo.com/v10/finance/quoteSummary/${ticker}?modules=${modules.join(',')}`)
-  const r = data.quoteSummary.result[0]
-  const fd = r.financialData || {}
-  const ks = r.defaultKeyStatistics || {}
-  const sd = r.summaryDetail || {}
-  const ap = r.assetProfile || {}
-  const chartData = await yfFetch(`https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=1d`)
-  const meta = chartData.chart.result[0].meta
+  // Try quoteSummary v11 (newer, often works without crumb)
+  try {
+    const modules = 'summaryDetail,defaultKeyStatistics,financialData,assetProfile'
+    const data = await yf(`https://query2.finance.yahoo.com/v11/finance/quoteSummary/${ticker}?modules=${modules}&corsDomain=finance.yahoo.com`)
+    const r = data.quoteSummary.result[0]
+    const fd = r.financialData || {}
+    const ks = r.defaultKeyStatistics || {}
+    const sd = r.summaryDetail || {}
+    const ap = r.assetProfile || {}
+    const quote = await getQuote(ticker)
+    return buildFundamentals(ticker, quote.name, ap, fd, ks, sd)
+  } catch {
+    // Fallback: return just quote data
+    const quote = await getQuote(ticker)
+    return { ticker, name: quote.name, marketCap: null }
+  }
+}
+
+function buildFundamentals(ticker, name, ap, fd, ks, sd) {
+  const v = (x) => (typeof x === 'object' && x !== null) ? (x.raw ?? x) : x
   return {
-    ticker, name: meta.longName || meta.shortName || ticker,
-    sector: ap.sector, industry: ap.industry, description: ap.longBusinessSummary?.slice(0, 600),
+    ticker, name, sector: ap.sector, industry: ap.industry,
+    description: ap.longBusinessSummary?.slice(0, 600),
     employees: ap.fullTimeEmployees, website: ap.website, country: ap.country,
-    marketCap: meta.marketCap, trailingPE: ks.trailingPE?.raw || sd.trailingPE?.raw,
-    forwardPE: ks.forwardPE?.raw || sd.forwardPE?.raw, priceToBook: ks.priceToBook?.raw,
-    priceToSales: ks.priceToSalesTrailing12Months?.raw, enterpriseToEbitda: ks.enterpriseToEbitda?.raw,
-    pegRatio: ks.pegRatio?.raw, profitMargins: fd.profitMargins?.raw || ks.profitMargins?.raw,
-    grossMargins: fd.grossMargins?.raw, operatingMargins: fd.operatingMargins?.raw,
-    returnOnEquity: fd.returnOnEquity?.raw, returnOnAssets: fd.returnOnAssets?.raw,
-    revenueGrowth: fd.revenueGrowth?.raw, earningsGrowth: fd.earningsGrowth?.raw,
-    eps: ks.trailingEps?.raw, forwardEps: ks.forwardEps?.raw,
-    totalRevenue: fd.totalRevenue?.raw, ebitda: fd.ebitda?.raw,
-    debtToEquity: fd.debtToEquity?.raw, currentRatio: fd.currentRatio?.raw,
-    totalCash: fd.totalCash?.raw, totalDebt: fd.totalDebt?.raw, bookValue: ks.bookValue?.raw,
-    freeCashflow: fd.freeCashflow?.raw, operatingCashflow: fd.operatingCashflow?.raw,
-    dividendRate: sd.dividendRate?.raw, dividendYield: sd.dividendYield?.raw,
-    beta: sd.beta?.raw, sharesOutstanding: ks.sharesOutstanding?.raw,
-    targetMeanPrice: fd.targetMeanPrice?.raw, analystRating: fd.recommendationKey,
-    numberOfAnalysts: fd.numberOfAnalystOpinions?.raw,
+    trailingPE: v(ks.trailingPE) || v(sd.trailingPE),
+    forwardPE: v(ks.forwardPE) || v(sd.forwardPE),
+    priceToBook: v(ks.priceToBook), priceToSales: v(ks.priceToSalesTrailing12Months),
+    enterpriseToEbitda: v(ks.enterpriseToEbitda), pegRatio: v(ks.pegRatio),
+    profitMargins: v(fd.profitMargins) || v(ks.profitMargins),
+    grossMargins: v(fd.grossMargins), operatingMargins: v(fd.operatingMargins),
+    returnOnEquity: v(fd.returnOnEquity), returnOnAssets: v(fd.returnOnAssets),
+    revenueGrowth: v(fd.revenueGrowth), earningsGrowth: v(fd.earningsGrowth),
+    eps: v(ks.trailingEps), forwardEps: v(ks.forwardEps),
+    totalRevenue: v(fd.totalRevenue), ebitda: v(fd.ebitda),
+    debtToEquity: v(fd.debtToEquity), currentRatio: v(fd.currentRatio),
+    totalCash: v(fd.totalCash), totalDebt: v(fd.totalDebt), bookValue: v(ks.bookValue),
+    freeCashflow: v(fd.freeCashflow), operatingCashflow: v(fd.operatingCashflow),
+    dividendRate: v(sd.dividendRate), dividendYield: v(sd.dividendYield),
+    beta: v(sd.beta), sharesOutstanding: v(ks.sharesOutstanding),
+    targetMeanPrice: v(fd.targetMeanPrice), analystRating: fd.recommendationKey,
+    numberOfAnalysts: v(fd.numberOfAnalystOpinions),
   }
 }
 
 export async function search(q) {
-  const data = await yfFetch(`https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(q)}&newsCount=0&quotesCount=8`)
+  const data = await yf(`https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(q)}&newsCount=0&quotesCount=8`)
   return (data.quotes || [])
-    .filter(q => q.quoteType === 'EQUITY')
-    .map(q => ({ ticker: q.symbol, name: q.shortname || q.longname, exchange: q.exchDisp }))
+    .filter(r => r.quoteType === 'EQUITY')
+    .map(r => ({ ticker: r.symbol, name: r.shortname || r.longname, exchange: r.exchDisp }))
 }
 
 export async function getQuoteSimple(ticker) {
-  // Lightweight price fetch for portfolio enrichment
-  const data = await yfFetch(`https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=1d`)
+  const data = await yf(`https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=1d`)
   return data.chart.result[0].meta.regularMarketPrice || 0
 }
