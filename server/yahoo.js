@@ -5,8 +5,28 @@ const HEADERS = {
   'Accept-Language': 'en-US,en;q=0.9',
 }
 
+async function getCookieAndCrumb() {
+  if (global._crumb && Date.now() < global._cookieExpiry) return { cookie: global._cookie, crumb: global._crumb }
+
+  const r1 = await fetch('https://finance.yahoo.com', { headers: HEADERS })
+  const cookies = r1.headers.getSetCookie?.() || []
+  global._cookie = cookies.map(c => c.split(';')[0]).join('; ')
+
+  const r2 = await fetch('https://query2.finance.yahoo.com/v1/test/getcrumb', {
+    headers: { ...HEADERS, Cookie: global._cookie }
+  })
+  global._crumb = await r2.text()
+  global._cookieExpiry = Date.now() + 30 * 60 * 1000
+
+  return { cookie: global._cookie, crumb: global._crumb }
+}
+
 async function yf(url) {
-  const res = await fetch(url, { headers: HEADERS })
+  const { cookie, crumb } = await getCookieAndCrumb()
+  const sep = url.includes('?') ? '&' : '?'
+  const res = await fetch(`${url}${sep}crumb=${encodeURIComponent(crumb)}`, {
+    headers: { ...HEADERS, Cookie: cookie }
+  })
   if (!res.ok) throw new Error(`Yahoo ${res.status} ${url.split('?')[0]}`)
   return res.json()
 }
