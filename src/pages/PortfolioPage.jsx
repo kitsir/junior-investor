@@ -767,7 +767,6 @@ export default function PortfolioPage() {
   const [positions, setPositions] = useState([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
-  const [showBatchImport, setShowBatchImport] = useState(false)
   const [showAuthModal, setShowAuthModal] = useState(false)
   const [isPublic, setIsPublic] = useState(false)
   const [toggleLoading, setToggleLoading] = useState(false)
@@ -936,14 +935,7 @@ export default function PortfolioPage() {
           <button onClick={() => setShowProfile(true)} className="btn-ghost" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, padding: '6px 14px' }}>
             <span style={{ fontSize: 16 }}>{user.avatarEmoji || '🧑‍💻'}</span> โปรไฟล์
           </button>
-          <button
-            onClick={() => { setShowBatchImport(true); setShowForm(false) }}
-            className="btn-ghost"
-            style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1px solid var(--border-color)' }}
-          >
-            📋 นำเข้าพอร์ต
-          </button>
-          <button onClick={() => { setShowForm(!showForm); setShowBatchImport(false) }} className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <button onClick={() => { setShowForm(!showForm) }} className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <Plus size={14} /> เพิ่มการลงทุน
           </button>
         </div>
@@ -990,12 +982,6 @@ export default function PortfolioPage() {
         </div>
       )}
 
-      {showBatchImport && (
-        <BatchImportModal
-          onClose={() => setShowBatchImport(false)}
-          onImported={() => { setShowBatchImport(false); loadPositions() }}
-        />
-      )}
 
       {showForm && (
         <div style={{ marginBottom: 24 }}>

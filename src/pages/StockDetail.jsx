@@ -195,6 +195,7 @@ export default function StockDetail() {
 
   useEffect(() => {
     if (!sym) return
+    window.scrollTo({ top: 0, behavior: 'instant' })
     setLoading({ quote: true, chart: true, fundamentals: true })
     setChartError(null)
     setQuote(null); setBars([]); setFundamentals(null); setSrLevels([])
