@@ -8,7 +8,7 @@ import authRouter from './routes/auth.js'
 import ceoRouter from './routes/ceo.js'
 
 const app = express()
-const PORT = process.env.PORT || 3001
+const PORT = 3001
 const FRONTEND_URL = process.env.FRONTEND_URL || ''
 
 app.use(cors({
