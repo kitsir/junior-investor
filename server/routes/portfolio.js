@@ -1,17 +1,16 @@
 import { Router } from 'express'
-import YahooFinance from 'yahoo-finance2'
 import pool from '../db.js'
 import { optionalAuth } from '../middleware/auth.js'
+import { getQuoteSimple } from '../yahoo.js'
 
-const yahooFinance = new YahooFinance()
 const router = Router()
 
 async function enrichWithPrices(positions) {
   const tickers = [...new Set(positions.map(p => p.ticker))]
-  const quotes = await Promise.allSettled(tickers.map(t => yahooFinance.quote(t)))
+  const quotes = await Promise.allSettled(tickers.map(t => getQuoteSimple(t)))
   const priceMap = {}
   quotes.forEach((r, i) => {
-    if (r.status === 'fulfilled') priceMap[tickers[i]] = r.value.regularMarketPrice || 0
+    if (r.status === 'fulfilled') priceMap[tickers[i]] = r.value || 0
   })
   let totalCost = 0, totalValue = 0
   const enriched = positions.map(p => {

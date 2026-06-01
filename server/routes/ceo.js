@@ -1,7 +1,6 @@
 import { Router } from 'express'
-import YahooFinance from 'yahoo-finance2'
+import { getQuoteSimple } from '../yahoo.js'
 
-const yahooFinance = new YahooFinance()
 const router = Router()
 
 const POSITIONS = [
@@ -19,13 +18,11 @@ const POSITIONS = [
 router.get('/', async (req, res) => {
   try {
     const tickers = POSITIONS.map(p => p.ticker)
-    const quotes = await Promise.allSettled(tickers.map(t => yahooFinance.quote(t)))
+    const quotes = await Promise.allSettled(tickers.map(t => getQuoteSimple(t)))
 
     const priceMap = {}
     quotes.forEach((r, i) => {
-      if (r.status === 'fulfilled') {
-        priceMap[tickers[i]] = r.value.regularMarketPrice || 0
-      }
+      if (r.status === 'fulfilled') priceMap[tickers[i]] = r.value || 0
     })
 
     let totalCost = 0
