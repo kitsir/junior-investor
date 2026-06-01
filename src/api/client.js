@@ -55,4 +55,5 @@ export const authApi = {
   login: (data) => api.post('/auth/login', data).then(r => r.data),
   me: () => api.get('/auth/me').then(r => r.data),
   togglePublic: (isPublic) => api.patch('/auth/public', { isPublic }).then(r => r.data),
+  updateProfile: (data) => api.put('/auth/profile', data).then(r => r.data),
 }

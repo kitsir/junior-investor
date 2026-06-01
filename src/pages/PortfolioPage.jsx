@@ -594,11 +594,7 @@ export default function PortfolioPage() {
 
   const saveProfile = async () => {
     try {
-      await fetch('/api/auth/profile', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` },
-        body: JSON.stringify({ themeColor, avatarEmoji })
-      })
+      await authApi.updateProfile({ themeColor, avatarEmoji })
       setShowProfile(false)
       window.location.reload()
     } catch {}
