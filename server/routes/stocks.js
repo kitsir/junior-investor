@@ -59,9 +59,13 @@ router.get('/:ticker/chart', async (req, res) => {
   const cacheKey = `${ticker}_${range}_${interval}`
   
   const cached = await getCacheRow(cacheKey, 'chart')
-  const isFresh = cached && (Date.now() - new Date(cached.updated_at).getTime()) / 60000 < TTL.chart
-  
-  if (isFresh) return res.json({ success: true, bars: JSON.parse(cached.data), cached: true })
+  const parsedChart = cached ? JSON.parse(cached.data) : null
+  // Reject empty/poison cache (empty array from previous failed fetch)
+  const isFresh = cached
+    && (Date.now() - new Date(cached.updated_at).getTime()) / 60000 < TTL.chart
+    && Array.isArray(parsedChart) && parsedChart.length > 0
+
+  if (isFresh) return res.json({ success: true, bars: parsedChart, cached: true })
   
   try {
     const bars = await getChart(ticker, range, interval)

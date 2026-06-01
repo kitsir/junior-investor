@@ -89,12 +89,17 @@ export async function getChart(ticker, range = '1y', interval = '1d') {
   // 1st: Yahoo Finance (query1 → query2 fallback)
   try {
     const data = await yfFetch(`/v8/finance/chart/${ticker}?interval=${interval}&period1=${p1}&period2=${p2}&includePrePost=false`)
-    const r = data.chart.result[0]
+    const r = data.chart.result?.[0]
+    if (!r) throw new Error('Yahoo: no chart result')
     const times = r.timestamp || []
-    const q = r.indicators.quote[0]
-    return times.map((t, i) => ({
+    const q = r.indicators?.quote?.[0]
+    if (!q) throw new Error('Yahoo: no quote indicators')
+    const bars = times.map((t, i) => ({
       time: t, open: q.open[i], high: q.high[i], low: q.low[i], close: q.close[i], volume: q.volume[i] || 0,
     })).filter(b => b.open && b.close)
+    // Treat empty result as failure so Stooq fallback can run
+    if (!bars.length) throw new Error(`Yahoo returned 0 bars for ${ticker}`)
+    return bars
   } catch (yahooErr) {
     console.warn(`Yahoo chart failed for ${ticker}: ${yahooErr.message}`)
     // 2nd: Stooq fallback (US stocks — no exchange dot-suffix like .BK, .L)
