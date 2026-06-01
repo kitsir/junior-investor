@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Trash2, Search, LogIn, Share2, Eye, EyeOff, ChevronDown, ChevronRight, Activity } from 'lucide-react'
+import { Plus, Trash2, Search, LogIn, Share2, Eye, EyeOff, ChevronDown, ChevronRight, Activity, TrendingDown } from 'lucide-react'
 import { portfolioApi, stocksApi, authApi } from '../api/client.js'
 import useAuth from '../store/useAuth.js'
 import AuthModal from '../components/AuthModal.jsx'
@@ -244,15 +244,154 @@ function AddForm({ onAdd, onCancel }) {
   )
 }
 
-function GroupedPositionRow({ group, totalValue, onDelete }) {
+function SellModal({ group, onClose, onSold }) {
+  const [shares, setShares] = useState(group.totalShares.toFixed(6))
+  const [sellPrice, setSellPrice] = useState(group.price.toFixed(2))
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  const sharesToSell = parseFloat(shares) || 0
+  const price = parseFloat(sellPrice) || 0
+  const proceeds = sharesToSell * price
+  const avgCost = group.totalCost / group.totalShares
+  const realizedGain = (price - avgCost) * sharesToSell
+  const realizedGainPct = avgCost > 0 ? ((price - avgCost) / avgCost) * 100 : 0
+  const up = realizedGain >= 0
+
+  const handleSell = async () => {
+    if (sharesToSell <= 0 || sharesToSell > group.totalShares + 0.0001) {
+      setError('จำนวนหุ้นไม่ถูกต้อง')
+      return
+    }
+    setLoading(true)
+    setError('')
+    try {
+      // FIFO: delete/reduce oldest lots first
+      const sorted = [...group.lots].sort((a, b) => new Date(a.added_at) - new Date(b.added_at))
+      let remaining = sharesToSell
+      for (const lot of sorted) {
+        if (remaining <= 0) break
+        if (lot.shares <= remaining + 0.000001) {
+          await portfolioApi.deletePosition(lot.id)
+          remaining -= lot.shares
+        } else {
+          await portfolioApi.updatePosition(lot.id, {
+            shares: lot.shares - remaining,
+            avg_cost: lot.avg_cost,
+            note: lot.note,
+          })
+          remaining = 0
+        }
+      }
+      onSold()
+      onClose()
+    } catch (e) {
+      setError('เกิดข้อผิดพลาด กรุณาลองใหม่')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
+      onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="card" style={{ padding: '24px', width: 420, maxWidth: '100%' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20, paddingBottom: 16, borderBottom: '1px solid var(--divider)' }}>
+          <LogoAvatar ticker={group.ticker} size={42} />
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--text-ink)' }}>{group.ticker}</div>
+            <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>ถือ {group.totalShares.toFixed(4)} หุ้น · ราคาตลาด {fmt.price(group.price)}</div>
+          </div>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 16 }}>
+          <div>
+            <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 6 }}>จำนวนหุ้นที่ขาย</label>
+            <input
+              className="input"
+              type="number"
+              step="any"
+              min="0"
+              max={group.totalShares}
+              value={shares}
+              onChange={e => setShares(e.target.value)}
+              autoFocus
+            />
+            <button
+              onClick={() => setShares(group.totalShares.toFixed(6))}
+              style={{ fontSize: 11, color: 'var(--primary)', background: 'none', border: 'none', cursor: 'pointer', padding: '4px 0', textDecoration: 'underline' }}
+            >
+              ขายทั้งหมด
+            </button>
+          </div>
+          <div>
+            <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 6 }}>ราคาขายต่อหุ้น (USD)</label>
+            <input
+              className="input"
+              type="number"
+              step="any"
+              min="0"
+              value={sellPrice}
+              onChange={e => setSellPrice(e.target.value)}
+            />
+          </div>
+        </div>
+
+        {sharesToSell > 0 && price > 0 && (
+          <div style={{ background: up ? 'var(--up-bg)' : 'var(--down-bg)', borderRadius: 12, padding: '14px 16px', marginBottom: 16 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <div>
+                <div style={{ fontSize: 11, color: up ? 'var(--up)' : 'var(--down)', marginBottom: 2 }}>รับเงินคืน</div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: up ? 'var(--up)' : 'var(--down)' }}>{fmt.price(proceeds)}</div>
+              </div>
+              <div>
+                <div style={{ fontSize: 11, color: up ? 'var(--up)' : 'var(--down)', marginBottom: 2 }}>กำไร/ขาดทุนที่รับรู้</div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: up ? 'var(--up)' : 'var(--down)' }}>
+                  {up ? '+' : ''}{fmt.price(realizedGain)} ({up ? '+' : ''}{realizedGainPct.toFixed(2)}%)
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {error && <div style={{ fontSize: 13, color: 'var(--down)', marginBottom: 12 }}>{error}</div>}
+
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            onClick={handleSell}
+            disabled={loading || sharesToSell <= 0}
+            style={{
+              flex: 1, padding: '10px', borderRadius: 10, fontWeight: 700, fontSize: 14,
+              background: 'var(--down)', color: '#fff', border: 'none', cursor: loading ? 'wait' : 'pointer',
+              opacity: loading || sharesToSell <= 0 ? 0.6 : 1,
+            }}
+          >
+            {loading ? 'กำลังดำเนินการ...' : `ยืนยันขาย ${sharesToSell > 0 ? sharesToSell.toFixed(4) : ''} หุ้น`}
+          </button>
+          <button onClick={onClose} className="btn-ghost">ยกเลิก</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function GroupedPositionRow({ group, totalValue, onDelete, onSold }) {
   const navigate = useNavigate()
   const [expanded, setExpanded] = useState(false)
+  const [showSell, setShowSell] = useState(false)
   const { ticker, name, price, totalShares, totalCost, currentValue, gain, gainPct, lots } = group
   const weight = totalValue > 0 ? (currentValue / totalValue) * 100 : 0
   const up = gain >= 0
 
   return (
     <>
+      {showSell && (
+        <SellModal
+          group={group}
+          onClose={() => setShowSell(false)}
+          onSold={onSold}
+        />
+      )}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', borderBottom: '1px solid var(--divider)', background: expanded ? 'var(--divider)' : 'transparent', transition: 'background 0.2s', paddingLeft: expanded ? 8 : 0, paddingRight: expanded ? 8 : 0, borderRadius: expanded ? 8 : 0 }}>
         {/* Expand Toggle */}
         <button onClick={() => setExpanded(!expanded)} style={{ background: 'none', border: 'none', color: 'var(--text-tertiary)', cursor: 'pointer', display: 'flex', padding: 4 }}>
@@ -306,6 +445,22 @@ function GroupedPositionRow({ group, totalValue, onDelete }) {
             {up ? '+' : ''}{gainPct?.toFixed(2)}%
           </div>
         </div>
+
+        {/* Sell button */}
+        <button
+          onClick={() => setShowSell(true)}
+          title="ขายหุ้น"
+          style={{
+            flexShrink: 0, display: 'flex', alignItems: 'center', gap: 4,
+            padding: '5px 10px', borderRadius: 8, fontSize: 12, fontWeight: 600,
+            background: 'var(--down-bg)', color: 'var(--down)',
+            border: '1px solid transparent', cursor: 'pointer',
+          }}
+          onMouseEnter={e => e.currentTarget.style.border = '1px solid var(--down)'}
+          onMouseLeave={e => e.currentTarget.style.border = '1px solid transparent'}
+        >
+          <TrendingDown size={12} /> ขาย
+        </button>
       </div>
 
       {/* Expanded Lots */}
@@ -615,7 +770,7 @@ export default function PortfolioPage() {
             </div>
 
             {positions.map(group => (
-              <GroupedPositionRow key={group.ticker} group={group} totalValue={totalValue} onDelete={deletePosition} />
+              <GroupedPositionRow key={group.ticker} group={group} totalValue={totalValue} onDelete={deletePosition} onSold={loadPositions} />
             ))}
           </>
         )}
