@@ -11,13 +11,18 @@ const app = express()
 const PORT = process.env.PORT || 3001
 const FRONTEND_URL = process.env.FRONTEND_URL || ''
 
-const allowedOrigins = [
-  'http://localhost:5173',
-  'http://localhost:4173',
-  ...(FRONTEND_URL ? [FRONTEND_URL] : []),
-]
-
-app.use(cors({ origin: allowedOrigins }))
+app.use(cors({
+  origin: (origin, cb) => {
+    if (!origin) return cb(null, true)
+    const allowed = [
+      'http://localhost:5173',
+      'http://localhost:4173',
+      ...(FRONTEND_URL ? [FRONTEND_URL] : []),
+    ]
+    if (allowed.includes(origin) || /\.vercel\.app$/.test(origin)) return cb(null, true)
+    cb(new Error('CORS: ' + origin))
+  }
+}))
 app.use(express.json())
 
 app.use('/api/auth', authRouter)
