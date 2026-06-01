@@ -42,6 +42,7 @@ router.get('/:ticker/quote', async (req, res) => {
     const quote = await getQuote(ticker)
     res.json({ success: true, quote })
   } catch (err) {
+    console.error(`Quote error for ${ticker}:`, err.message)
     res.status(502).json({ success: false, error: err.message })
   }
 })
@@ -57,6 +58,7 @@ router.get('/:ticker/chart', async (req, res) => {
     await setCache(cacheKey, 'chart', bars)
     res.json({ success: true, bars })
   } catch (err) {
+    console.error(`Chart error for ${ticker}:`, err.message)
     res.status(502).json({ success: false, error: err.message })
   }
 })
