@@ -169,38 +169,47 @@ export function calculateFundamentalScore(f) {
     else if (f.revenueGrowth > 0.05) growth += 5
     else if (f.revenueGrowth > 0) growth += 2
   }
-  if (f.earningsGrowth != null) {
-    if (f.earningsGrowth > 0.25) growth += 12
-    else if (f.earningsGrowth > 0.15) growth += 8
-    else if (f.earningsGrowth > 0.05) growth += 4
-    else if (f.earningsGrowth > 0) growth += 1
+  // Earnings growth: use TV YoY data, fall back to implied from TTM→Forward EPS
+  const egSource = f.earningsGrowth ?? f.impliedEpsGrowth ?? null
+  if (egSource != null) {
+    if (egSource > 0.25) growth += 12
+    else if (egSource > 0.15) growth += 8
+    else if (egSource > 0.05) growth += 4
+    else if (egSource > 0) growth += 2
   }
   breakdown.growth = Math.min(growth, 25)
 
-  // 3. Value (0-25) — uses trailing P/E or forward P/E as fallback
+  // 3. Value (0-25)
+  // Use the BETTER (lower) of trailing vs forward P/E — fairer for growth stocks
   let value = 0
-  const pe = (f.trailingPE != null && f.trailingPE > 0) ? f.trailingPE
-           : (f.forwardPE  != null && f.forwardPE  > 0) ? f.forwardPE : null
+  const trailingValid = f.trailingPE != null && f.trailingPE > 0
+  const forwardValid  = f.forwardPE  != null && f.forwardPE  > 0
+  let pe = null
+  if (trailingValid && forwardValid) pe = Math.min(f.trailingPE, f.forwardPE)
+  else if (trailingValid) pe = f.trailingPE
+  else if (forwardValid)  pe = f.forwardPE
   if (pe != null) {
-    if (pe < 12)  value += 12
-    else if (pe < 20) value += 9
-    else if (pe < 30) value += 6
-    else if (pe < 50) value += 4
-    else if (pe < 80) value += 2
-    // pe ≥ 80 = 0 pts (expensive but data IS present)
+    if (pe < 12)   value += 12
+    else if (pe < 20)  value += 9
+    else if (pe < 30)  value += 6
+    else if (pe < 50)  value += 4
+    else if (pe < 80)  value += 3
+    else if (pe < 120) value += 2
+    else               value += 1  // very high P/E = 1 pt (data present, just expensive)
   }
-  // Use TTM P/B, fall back to quarterly P/B
+  // P/B: use TTM, fall back to quarterly
   const pb = f.priceToBook ?? f.priceToBookQtr ?? null
   if (pb != null && pb > 0) {
-    if (pb < 1.5) value += 8
-    else if (pb < 3) value += 5
-    else if (pb < 6) value += 2
-    else if (pb < 10) value += 1
+    if (pb < 1.5)  value += 8
+    else if (pb < 3)   value += 5
+    else if (pb < 6)   value += 3
+    else if (pb < 10)  value += 2
+    else if (pb < 20)  value += 1  // high P/B growth stocks still get 1 pt
   }
   if (f.enterpriseToEbitda != null && f.enterpriseToEbitda > 0) {
-    if (f.enterpriseToEbitda < 10) value += 5
-    else if (f.enterpriseToEbitda < 18) value += 3
-    else if (f.enterpriseToEbitda < 28) value += 1
+    if (f.enterpriseToEbitda < 10)  value += 5
+    else if (f.enterpriseToEbitda < 18)  value += 3
+    else if (f.enterpriseToEbitda < 28)  value += 1
   }
   breakdown.value = Math.min(value, 25)
 

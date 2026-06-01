@@ -6,8 +6,9 @@ const router = Router()
 const TTL = {
   quote: 2,
   chart: 15,
-  fundamentals: 1440 // 24 hours
+  fundamentals: 360 // 6 hours (was 24h — shorter for data freshness)
 }
+const FUNDAMENTALS_SCHEMA_V = 3 // bump to bust old cache entries
 
 async function getCacheRow(key, type) {
   const { rows } = await pool.query(
@@ -81,6 +82,7 @@ router.get('/:ticker/fundamentals', async (req, res) => {
   const isFresh = cached
     && (Date.now() - new Date(cached.updated_at).getTime()) / 60000 < TTL.fundamentals
     && parsedCache?.marketCap != null
+    && parsedCache?._schemaV === FUNDAMENTALS_SCHEMA_V // bust cache on schema change
 
   if (isFresh) return res.json({ success: true, fundamentals: parsedCache, cached: true })
   

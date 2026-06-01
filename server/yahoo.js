@@ -183,7 +183,15 @@ export async function getFundamentals(ticker) {
       if (quote.price && forwardEps) forwardPE = quote.price / forwardEps
     } catch (_) {}
 
+    // Implied EPS growth from TTM vs Forward EPS (when TV doesn't return YoY data)
+    const epsVal = v(d[13])
+    const fwdEpsVal = forwardEps
+    const impliedEpsGrowth = (epsVal > 0 && fwdEpsVal > 0)
+      ? (fwdEpsVal - epsVal) / Math.abs(epsVal)
+      : null
+
     return {
+      _schemaV: 3,  // increment to bust stale cache entries
       ticker: ticker,
       name: d[1] || ticker,
       sector: d[22],
@@ -218,7 +226,9 @@ export async function getFundamentals(ticker) {
       dividendYield: v(d[18], true),
       beta: v(d[19]),
       sharesOutstanding: v(d[20]),
-      earningsGrowth: v(d[26], true),      // EPS YoY growth from TV Scanner
+      // TV Scanner returns growth YoY as percentage (e.g., 15.6 = 15.6%), same as margin fields
+      earningsGrowth: v(d[26], true) ?? impliedEpsGrowth,  // YoY EPS, fallback to implied
+      impliedEpsGrowth: impliedEpsGrowth,  // always expose for scoring fallback
       priceToBookQtr: v(d[27]),            // P/B quarterly fallback
       targetMeanPrice: null,
       analystRating: null,
