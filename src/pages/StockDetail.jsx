@@ -161,15 +161,21 @@ export default function StockDetail() {
       .catch(() => {})
       .finally(() => setLoading(l => ({ ...l, quote: false })))
 
+    // Fetch the specific user chart range for display
     stocksApi.chart(sym, chartRange)
       .then(d => {
-        const b = d.bars || []
-        setBars(b)
-        const lookback = chartRange === '1mo' ? 3 : chartRange === '3mo' ? 5 : 10
-        setSrLevels(findSupportResistanceLevels(b, { lookback }))
+        setBars(d.bars || [])
       })
       .catch(() => {})
       .finally(() => setLoading(l => ({ ...l, chart: false })))
+
+    // Fetch a background 2Y chart exclusively for consistent Support/Resistance levels
+    stocksApi.chart(sym, '2y')
+      .then(d => {
+        const b = d.bars || []
+        setSrLevels(findSupportResistanceLevels(b, { lookback: 10 }))
+      })
+      .catch(() => {})
 
     // Bypass cache once by appending a timestamp to force fresh fetch if it's broken
     stocksApi.fundamentals(sym)
@@ -187,10 +193,8 @@ export default function StockDetail() {
     setLoading(l => ({ ...l, chart: true }))
     stocksApi.chart(sym, range)
       .then(d => {
-        const b = d.bars || []
-        setBars(b)
-        const lookback = range === '1mo' ? 3 : range === '3mo' ? 5 : 10
-        setSrLevels(findSupportResistanceLevels(b, { lookback }))
+        setBars(d.bars || [])
+        // Do NOT recalculate SR levels here, keep the global ones!
       })
       .catch(() => {})
       .finally(() => setLoading(l => ({ ...l, chart: false })))

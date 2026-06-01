@@ -62,7 +62,8 @@ export async function getFundamentals(ticker) {
       'total_revenue', 'revenue_growth_yoy', 'earnings_per_share_basic_ttm',
       'total_debt', 'cash_n_short_term_invest', 'current_ratio', 'debt_to_equity',
       'dividend_yield_recent', 'beta_1_year', 'total_shares_outstanding',
-      'number_of_employees', 'sector', 'industry'
+      'number_of_employees', 'sector', 'industry', 'operating_margin', 
+      'earnings_per_share_forecast_next_fy'
     ]
     
     // Some tickers from Yahoo like PTT.BK need to be stripped of .BK or mapped
@@ -87,6 +88,17 @@ export async function getFundamentals(ticker) {
     
     const d = json.data[0].d
     const v = (val, isPct = false) => val ? (isPct ? val / 100 : val) : null
+    
+    let forwardEps = v(d[25]);
+    let forwardPE = null;
+    let quotePrice = null;
+    try {
+        const quote = await getQuote(ticker);
+        quotePrice = quote.price;
+        if (quotePrice && forwardEps) {
+            forwardPE = quotePrice / forwardEps;
+        }
+    } catch(e) {}
 
     return {
       ticker: ticker,
@@ -96,21 +108,21 @@ export async function getFundamentals(ticker) {
       description: 'Data provided by TradingView Scanner API.', // We don't have full business description from TV
       marketCap: v(d[2]),
       trailingPE: v(d[3]),
-      forwardPE: null,
+      forwardPE: forwardPE,
       priceToBook: v(d[4]),
       priceToSales: v(d[5]),
       enterpriseToEbitda: v(d[6]),
-      pegRatio: null,
+      pegRatio: null, // TV Scanner doesn't expose PEG directly for free
       grossMargins: v(d[7], true),
       profitMargins: v(d[8], true),
-      operatingMargins: null,
+      operatingMargins: v(d[24], true),
       returnOnEquity: v(d[9], true),
       returnOnAssets: v(d[10], true),
       totalRevenue: v(d[11]),
       revenueGrowth: v(d[12], true),
-      earningsGrowth: null,
+      earningsGrowth: null, // TV doesn't reliably expose this
       eps: v(d[13]),
-      forwardEps: null,
+      forwardEps: forwardEps,
       ebitda: null,
       totalDebt: v(d[14]),
       currentRatio: v(d[16]),
