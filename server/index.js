@@ -33,7 +33,7 @@ app.use('/api/ceo', ceoRouter)
 
 app.get('/api/health', (req, res) => res.json({ ok: true, ts: new Date().toISOString() }))
 
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`StockVision API listening → port ${PORT}`)
   initDb()
     .then(() => console.log('DB ready'))
