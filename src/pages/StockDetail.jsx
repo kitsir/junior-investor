@@ -147,6 +147,7 @@ export default function StockDetail() {
   const [fundamentals, setFundamentals] = useState(null)
   const [srLevels, setSrLevels] = useState([])
   const [loading, setLoading] = useState({ quote: true, chart: true, fundamentals: true })
+  const [chartError, setChartError] = useState(null)
   const [tab, setTab] = useState(0)
   const [inWatchlist, setInWatchlist] = useState(false)
   const [showAddForm, setShowAddForm] = useState(false)
@@ -154,6 +155,7 @@ export default function StockDetail() {
   useEffect(() => {
     if (!sym) return
     setLoading({ quote: true, chart: true, fundamentals: true })
+    setChartError(null)
     setQuote(null); setBars([]); setFundamentals(null); setSrLevels([])
 
     stocksApi.quote(sym)
@@ -164,9 +166,14 @@ export default function StockDetail() {
     // Fetch the specific user chart range for display
     stocksApi.chart(sym, chartRange)
       .then(d => {
-        setBars(d.bars || [])
+        const b = d.bars || []
+        setBars(b)
+        if (!b.length) setChartError('ข้อมูลกราฟว่างเปล่าจาก server')
       })
-      .catch(() => {})
+      .catch(err => {
+        setChartError('โหลดกราฟไม่ได้ — ลองรีเฟรชอีกครั้ง')
+        console.error('Chart fetch error:', err)
+      })
       .finally(() => setLoading(l => ({ ...l, chart: false })))
 
     // Fetch a background 2Y chart exclusively for consistent Support/Resistance levels
@@ -191,12 +198,15 @@ export default function StockDetail() {
   const handleRangeChange = useCallback((range) => {
     setChartRange(range)
     setLoading(l => ({ ...l, chart: true }))
+    setChartError(null)
     stocksApi.chart(sym, range)
       .then(d => {
-        setBars(d.bars || [])
+        const b = d.bars || []
+        setBars(b)
+        if (!b.length) setChartError('ข้อมูลกราฟว่างเปล่าจาก server')
         // Do NOT recalculate SR levels here, keep the global ones!
       })
-      .catch(() => {})
+      .catch(() => setChartError('โหลดกราฟไม่ได้ — ลองรีเฟรชอีกครั้ง'))
       .finally(() => setLoading(l => ({ ...l, chart: false })))
   }, [sym])
 
@@ -359,6 +369,7 @@ export default function StockDetail() {
               range={chartRange}
               onRangeChange={handleRangeChange}
               loading={loading.chart}
+              error={chartError}
             />
             <AnalysisPanel
               bars={bars}

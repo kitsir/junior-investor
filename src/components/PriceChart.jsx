@@ -10,7 +10,7 @@ const RANGES = [
   { label: '5Y', value: '5y' },
 ]
 
-export default function PriceChart({ bars, levels = [], range, onRangeChange, loading }) {
+export default function PriceChart({ bars, levels = [], range, onRangeChange, loading, error }) {
   const containerRef = useRef(null)
   const chartRef = useRef(null)
   const seriesRef = useRef(null)
@@ -159,6 +159,17 @@ export default function PriceChart({ bars, levels = [], range, onRangeChange, lo
               borderTopColor: 'transparent', borderRadius: '50%',
               animation: 'spin 0.6s linear infinite',
             }} />
+          </div>
+        )}
+        {!loading && !bars?.length && (
+          <div style={{
+            position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
+            alignItems: 'center', justifyContent: 'center', zIndex: 10, gap: 8,
+          }}>
+            <span style={{ fontSize: 28 }}>📉</span>
+            <span style={{ fontSize: 13, color: '#6E6E73', fontWeight: 500 }}>
+              {error || 'ไม่สามารถโหลดข้อมูลกราฟได้ในขณะนี้'}
+            </span>
           </div>
         )}
         <div ref={containerRef} style={{ height: 360 }} />
